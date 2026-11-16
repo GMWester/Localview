@@ -1,4 +1,6 @@
-# Localview
+# Localview — SteamOS (Steam Frame & Steam Deck)
+
+> **This branch:** the SteamOS build (`linux/`): **arm64 for Steam Frame**, x64 for Steam Deck. Pushing here builds LAN and WAN bundles with an installer script and publishes release `steamos-v1.0.0`. In Game Mode / VR, add Localview as a Non-Steam Game; controllers drive the virtual cursor.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
