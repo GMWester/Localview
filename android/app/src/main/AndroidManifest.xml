@@ -14,6 +14,8 @@
     <!-- Runs on phones, tablets, Android TV and XR headsets (Meta Quest / Android XR panels). -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
+    <!-- Android XR: runs as a 2D panel in Home Space / Full Space; spatial APIs optional. -->
+    <uses-feature android:name="android.software.xr.api.spatial" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
     <application
@@ -31,7 +33,10 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:resizeableActivity="true">
+            <!-- Default panel size on Meta Quest / Android XR. -->
+            <layout android:defaultWidth="1280dp" android:defaultHeight="800dp" android:gravity="center" />
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -72,6 +77,10 @@
             </intent-filter>
         </provider>
 
+        <!-- Android XR: start as a 2D panel in Home Space. -->
+        <property
+            android:name="android.window.PROPERTY_XR_ACTIVITY_START_MODE"
+            android:value="XR_ACTIVITY_START_MODE_HOME_SPACE_MANAGED" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

@@ -1,4 +1,6 @@
-# Localview
+# Localview — Android XR & Meta Quest
+
+> **This branch:** the VR headset build (`android/`) for **Android XR** headsets and **Meta Quest** (Horizon OS). It runs as a resizable 2D panel; controller rays act as the mouse and the virtual cursor maps to thumbsticks/buttons. Pushing here builds LAN and WAN APKs and publishes release `android-xr-v1.0.0`.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
