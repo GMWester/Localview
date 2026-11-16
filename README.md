@@ -1,4 +1,6 @@
-# Localview
+# Localview — Linux
+
+> **This branch:** the Linux desktop app (`linux/`), x64 and arm64. Pushing here runs the test suite, then builds LAN and WAN bundles and publishes release `linux-v1.0.0`.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
