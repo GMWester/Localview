@@ -1,4 +1,6 @@
-# Localview
+# Localview — Android TV
+
+> **This branch:** the Android TV / Google TV app (`android/` with the leanback launcher + TV banner, D-pad virtual cursor on by default). Pushing here builds LAN and WAN APKs and publishes release `android-tv-v1.0.0`.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
