@@ -1,4 +1,6 @@
-# Localview
+# Localview — Windows
+
+> **This branch:** the Windows app (`windows/`). Pushing here builds **Localview LAN** and **Localview WAN** for Windows x64 and publishes them as release `windows-v1.0.0`. Other platforms live on their own branches (table below).
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
