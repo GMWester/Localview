@@ -1,4 +1,6 @@
-# Localview
+# Localview — Android
+
+> **This branch:** the Android phone/tablet app (`android/`). Pushing here builds LAN and WAN APKs and publishes release `android-v1.0.0`.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
