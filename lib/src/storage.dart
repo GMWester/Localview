@@ -82,6 +82,9 @@ class AppStore extends ChangeNotifier {
   /// Mount connected devices' storage as drives in the OS file manager.
   bool mountDrives = true;
 
+  /// Appearance: 'system', 'light', 'dark' or 'oled' (pure black for OLED screens).
+  String theme = 'system';
+
   /// Root directory shared (null = whole filesystem / all drives on Windows).
   String? fsRoot;
   final List<PairedDevice> paired = [];
@@ -151,6 +154,7 @@ class AppStore extends ChangeNotifier {
     streamScale = (j['streamScale'] as num?)?.toDouble() ?? 1.0;
     maxFps = j['maxFps'] as int? ?? 30;
     shareFiles = j['shareFiles'] as bool? ?? true;
+    theme = j['theme'] as String? ?? 'system';
     mountDrives = j['mountDrives'] as bool? ?? true;
     paired
       ..clear()
@@ -169,6 +173,7 @@ class AppStore extends ChangeNotifier {
         'streamScale': streamScale,
         'maxFps': maxFps,
         'shareFiles': shareFiles,
+        'theme': theme,
         'mountDrives': mountDrives,
         'paired': paired.map((p) => p.toJson()).toList(),
       };

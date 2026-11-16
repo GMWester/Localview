@@ -7,6 +7,7 @@ import 'src/app_controller.dart';
 import 'src/config.dart';
 import 'src/storage.dart';
 import 'src/ui/home_page.dart';
+import 'src/ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,12 +32,23 @@ class LocalviewApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final seed = kIsWan ? const Color(0xFF6C4BFF) : const Color(0xFF0E9F8E);
-    return MaterialApp(
-      title: 'Localview ${kModeName.toUpperCase()}',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.light, useMaterial3: true),
-      darkTheme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.dark, useMaterial3: true),
-      home: HomePage(app: app),
+    return ListenableBuilder(
+      listenable: app.store,
+      builder: (context, _) {
+        final t = app.store.theme;
+        return MaterialApp(
+          title: 'Localview ${kModeName.toUpperCase()}',
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(seed, Brightness.light),
+          darkTheme: buildTheme(seed, Brightness.dark, oled: t == 'oled'),
+          themeMode: switch (t) {
+            'light' => ThemeMode.light,
+            'dark' || 'oled' => ThemeMode.dark,
+            _ => ThemeMode.system,
+          },
+          home: HomePage(app: app),
+        );
+      },
     );
   }
 }

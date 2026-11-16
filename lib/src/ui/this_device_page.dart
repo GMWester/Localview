@@ -240,6 +240,28 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
             ]),
           ),
           Card(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ListTile(title: Text('Appearance', style: tt.titleMedium)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'system', icon: Icon(Icons.brightness_auto), label: Text('System')),
+                    ButtonSegment(value: 'light', icon: Icon(Icons.light_mode), label: Text('Light')),
+                    ButtonSegment(value: 'dark', icon: Icon(Icons.dark_mode), label: Text('Dark')),
+                    ButtonSegment(value: 'oled', icon: Icon(Icons.contrast), label: Text('OLED')),
+                  ],
+                  selected: {s.theme},
+                  onSelectionChanged: (v) async {
+                    s.theme = v.first;
+                    await s.save();
+                  },
+                ),
+              ),
+            ]),
+          ),
+          Card(
             child: Column(children: [
               ListTile(title: Text('Streaming quality (when this device is controlled)', style: tt.titleMedium)),
               ListTile(

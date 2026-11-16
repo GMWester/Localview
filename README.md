@@ -59,6 +59,7 @@ The in-app file browser (folder button in the session toolbar) works on every pl
 * **Mouse/keyboard**: everything is forwarded (physical key codes, so any layout works).
 * **Touch**: tap = click, long-press = right-click, drag = drag, two fingers = scroll, keyboard button = on-screen keyboard.
 * **TV remotes, game controllers, VR controllers**: the *virtual cursor* (mouse button in the toolbar; on by default on TV) — arrows/stick move, OK/A clicks, X right-clicks, Back/B toggles the toolbar. On Quest / Android XR the controller ray works as a normal pointer.
+* Appearance (This device → Appearance): System, Light, Dark, or **OLED** (pure black, ideal for OLED phones and VR headsets).
 * Toolbar: stream quality (resolution/fps), clipboard send/receive, Win key, Alt+Tab, Ctrl+Shift+Esc, Android Back/Home/Recents.
 
 ## Platform setup notes
