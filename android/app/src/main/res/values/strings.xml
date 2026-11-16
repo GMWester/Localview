@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_description">Lets devices you paired with Localview control this device (taps, swipes, typing). Localview only acts while a remote session is connected.</string>
+</resources>

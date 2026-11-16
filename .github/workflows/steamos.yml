@@ -1,0 +1,79 @@
+name: SteamOS (Steam Frame / Steam Deck) build & release
+
+on:
+  push:
+    branches: [steamos]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # arm64 for Steam Frame, x64 for Steam Deck
+    strategy:
+      matrix:
+        mode: [lan, wan]
+        arch: [x64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+      - name: Install Flutter
+        run: |
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - run: flutter config --no-analytics && flutter pub get
+      - run: flutter build linux --release --dart-define=LV_MODE=${{ matrix.mode }}
+      - name: Package
+        run: |
+          M=$(echo ${{ matrix.mode }} | tr a-z A-Z)
+          D=Localview-$M-steamos-${{ matrix.arch }}
+          cp -r build/linux/*/release/bundle "$D"
+          cp assets/icon.png "$D/localview.png"
+          cat > "$D/install.sh" <<EOS
+          #!/bin/sh
+          # Installs Localview $M for the current user (menu entry + icon).
+          set -e
+          DEST="\$HOME/.local/share/localview-${{ matrix.mode }}"
+          mkdir -p "\$DEST" "\$HOME/.local/share/applications"
+          cp -r "\$(dirname "\$0")"/. "\$DEST"/
+          cat > "\$HOME/.local/share/applications/localview-${{ matrix.mode }}.desktop" <<EOD
+          [Desktop Entry]
+          Type=Application
+          Name=Localview $M
+          Exec=\$DEST/localview
+          Icon=\$DEST/localview.png
+          Categories=Network;RemoteAccess;
+          EOD
+          echo "Installed. Launch 'Localview $M' from your app menu."
+          EOS
+          chmod +x "$D/install.sh"
+          tar czf "$D.tar.gz" "$D"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: steamos-${{ matrix.mode }}-${{ matrix.arch }}
+          path: Localview-*.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: steamos-v1.0.0
+          target_commitish: ${{ github.sha }}
+          name: Localview 1.0.0 — SteamOS (Steam Frame, Steam Deck)
+          make_latest: false
+          files: dist/*
+          body: |
+            SteamOS 3 — arm64 for Steam Frame, x64 for Steam Deck. In Desktop Mode extract and run `./install.sh`, then Steam → Add a Non-Steam Game → Localview to use it in Game Mode/VR.
+
+            **LAN** builds list devices on the same router; pick one and type the password set on it.
+            **WAN** builds connect over the internet: press **+**, enter the other device's IP and password; a pairing key is generated and stored on both devices.
+            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). Both devices must run the same variant.

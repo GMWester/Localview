@@ -1,0 +1,59 @@
+name: Android build & release
+
+on:
+  push:
+    branches: [android]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mode: [lan, wan]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build apk --release --dart-define=LV_MODE=${{ matrix.mode }} -P lvMode=${{ matrix.mode }}
+      - run: |
+          M=$(echo ${{ matrix.mode }} | tr a-z A-Z)
+          cp build/app/outputs/flutter-apk/app-release.apk "Localview-$M-android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.mode }}
+          path: Localview-*-android.apk
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v1.0.0
+          target_commitish: ${{ github.sha }}
+          name: Localview 1.0.0 — Android
+          make_latest: false
+          files: dist/*
+          body: |
+            Android 7.0+ phones and tablets. Install the APK (LAN and WAN install side by side). To be controlled: tap Start for screen sharing and enable the Localview accessibility service. Remote drives appear in the Files app.
+
+            **LAN** builds list devices on the same router; pick one and type the password set on it.
+            **WAN** builds connect over the internet: press **+**, enter the other device's IP and password; a pairing key is generated and stored on both devices.
+            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). Both devices must run the same variant.

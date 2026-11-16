@@ -1,0 +1,60 @@
+name: Windows build & release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        mode: [lan, wan]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release --dart-define=LV_MODE=${{ matrix.mode }}
+      - name: Package
+        shell: pwsh
+        run: |
+          $m = "${{ matrix.mode }}".ToUpper()
+          $dir = "Localview-$m-windows-x64"
+          Copy-Item -Recurse build\windows\x64\runner\Release $dir
+          Rename-Item "$dir\localview.exe" "Localview $m.exe"
+          Compress-Archive -Path $dir -DestinationPath "$dir.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.mode }}
+          path: Localview-*-windows-x64.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-v1.0.0
+          target_commitish: ${{ github.sha }}
+          name: Localview 1.0.0 — Windows
+          make_latest: true
+          files: dist/*
+          body: |
+            Windows 10/11 (x64). Unzip and run **Localview LAN.exe** or **Localview WAN.exe**. Remote drives appear in File Explorer → This PC.
+
+            **LAN** builds list devices on the same router; pick one and type the password set on it.
+            **WAN** builds connect over the internet: press **+**, enter the other device's IP and password; a pairing key is generated and stored on both devices.
+            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). Both devices must run the same variant.
