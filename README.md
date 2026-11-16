@@ -1,4 +1,6 @@
-# Localview
+# Localview — iOS
+
+> **This branch:** the iOS / iPadOS app (`ios/`). Pushing here builds unsigned LAN and WAN IPAs and publishes release `ios-v1.0.0`. iOS works as a controller and file share; Apple does not let apps be remotely controlled.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
