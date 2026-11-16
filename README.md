@@ -1,4 +1,6 @@
-# Localview
+# Localview — macOS
+
+> **This branch:** the macOS app (`macos/`). Pushing here builds LAN and WAN app bundles and publishes release `macos-v1.0.0`.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
