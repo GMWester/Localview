@@ -13,7 +13,11 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        mode: [lan, wan]
+        mode: [lan, wan, combined]
+        include:
+          - { mode: lan, label: LAN }
+          - { mode: wan, label: WAN }
+          - { mode: combined, label: Combined }
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -26,7 +30,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $m = "${{ matrix.mode }}".ToUpper()
+          $m = "${{ matrix.label }}"
           $dir = "Localview-$m-windows-x64"
           Copy-Item -Recurse build\windows\x64\runner\Release $dir
           Rename-Item "$dir\localview.exe" "Localview $m.exe"
@@ -53,8 +57,9 @@ jobs:
           make_latest: true
           files: dist/*
           body: |
-            Windows 10/11 (x64). Unzip and run **Localview LAN.exe** or **Localview WAN.exe**. Remote drives appear in File Explorer → This PC.
+            Windows 10/11 (x64). Unzip and run **Localview LAN.exe**, **Localview WAN.exe** or **Localview Combined.exe**. Remote drives appear in File Explorer → This PC.
 
             **LAN** builds list devices on the same router; pick one and type the password set on it.
+            **Combined** builds do both in one app: nearby devices are listed automatically, and a device you connect to once on the LAN is also saved to *My devices* so you can reach it from anywhere. Combined works with LAN and WAN builds too.
             **WAN** builds connect over the internet: press **+**, enter the other device's IP and password; a pairing key is generated and stored on both devices.
-            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). Both devices must run the same variant.
+            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). LAN and WAN builds need the same variant on both devices (or Combined on either side).

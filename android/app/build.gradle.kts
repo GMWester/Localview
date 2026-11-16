@@ -1,4 +1,4 @@
-// LAN and WAN variants install side by side: -P lvMode=lan|wan (flutter: --android-project-arg lvMode=wan)
+// LAN and WAN variants install side by side: -P lvMode=lan|wan|combined (flutter: --android-project-arg lvMode=wan)
 val lvMode = ((project.findProperty("lvMode") as String?) ?: "lan").lowercase()
 
 plugins {
@@ -19,7 +19,10 @@ android {
 
     defaultConfig {
         applicationId = "io.localview.localview.$lvMode"
-        manifestPlaceholders["appLabel"] = "Localview ${lvMode.uppercase()}"
+        manifestPlaceholders["appLabel"] = when (lvMode) {
+            "combined" -> "Localview"
+            else -> "Localview ${lvMode.uppercase()}"
+        }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = maxOf(24, flutter.minSdkVersion)

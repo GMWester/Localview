@@ -16,6 +16,7 @@ Future<ClientSession?> connectTo(
   PairedDevice? paired,
   bool pair = false,
   bool open = true,
+  bool viaLan = false,
 }) async {
   final s = app.store;
   final key = 'client-${DateTime.now().microsecondsSinceEpoch}';
@@ -57,22 +58,32 @@ Future<ClientSession?> connectTo(
     messenger.showSnackBar(SnackBar(content: Text(err ?? 'Connection failed.')));
     return null;
   }
+  // From the LAN, remember the router-reported public IP as the "anywhere" address.
+  final remoteAddress = (viaLan && kHasWan && session.peerPublicIp != null) ? session.peerPublicIp! : host;
   if (session.newPairKey != null) {
     final existing = s.findPaired(session.peerId);
     await s.upsertPaired(PairedDevice(
       id: session.peerId,
       name: session.peerName,
       os: session.peerOs,
-      address: host,
+      address: remoteAddress,
       port: port,
       key: session.newPairKey!,
       allowIncoming: existing?.allowIncoming ?? false,
       outgoing: true,
+      lanAddress: viaLan ? host : existing?.lanAddress,
+      lanPort: viaLan ? port : existing?.lanPort,
     ));
   } else if (paired != null) {
     paired
       ..name = session.peerName
       ..os = session.peerOs;
+    if (viaLan) {
+      paired
+        ..lanAddress = host
+        ..lanPort = port;
+      if (session.peerPublicIp != null) paired.address = session.peerPublicIp!;
+    }
     await s.save();
   }
   if (open && context.mounted) {

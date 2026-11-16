@@ -90,6 +90,7 @@ class ClientSession extends ChangeNotifier {
   String? error;
   String peerId = '', peerName = '', peerOs = '';
   bool peerShares = false;
+  String? peerPublicIp;
   Uint8List? newPairKey;
   int screenW = 0, screenH = 0;
   final ValueNotifier<ui.Image?> image = ValueNotifier(null);
@@ -126,6 +127,7 @@ class ClientSession extends ChangeNotifier {
         peerName = j['name'] as String? ?? '';
         peerOs = j['os'] as String? ?? '';
         peerShares = j['share'] == true;
+        peerPublicIp = j['publicIp'] as String?;
         newPairKey = j['pairKey'] as Uint8List?;
         connected = true;
         status = 'Connected';
@@ -327,6 +329,7 @@ Future<void> _clientIsolateMain(List args) async {
         'name': welcome['name'],
         'os': welcome['os'],
         'share': welcome['share'] == true,
+        'publicIp': welcome['publicIp'],
         if (welcome['pairKey'] != null) 'pairKey': base64Decode(welcome['pairKey'] as String),
       }
     ]);

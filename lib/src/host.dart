@@ -15,7 +15,8 @@ import 'protocol.dart';
 import 'storage.dart';
 
 /// Snapshot of what the host isolate needs from [AppStore].
-Map<String, Object?> hostConfigFrom(AppStore s) => {
+Map<String, Object?> hostConfigFrom(AppStore s, [String? publicIp]) => {
+      'publicIp': publicIp,
       'id': s.deviceId,
       'name': s.deviceName,
       'os': kOsName,
@@ -56,6 +57,14 @@ class HostService extends ChangeNotifier {
   final Map<int, HostSessionInfo> sessions = {};
   String? error;
   bool get running => _iso != null && boundPort != null;
+
+  /// Router-reported public IP (WAN/combined), shared with peers that pair.
+  String? _publicIp;
+  String? get publicIp => _publicIp;
+  set publicIp(String? v) {
+    _publicIp = v;
+    _pushConfig();
+  }
   int? boundPort;
   void Function(String text)? onClipboardSet;
   Future<void> Function(int sid, String name, String url, String volume)? onMount;
@@ -69,14 +78,14 @@ class HostService extends ChangeNotifier {
     _rx = rx;
     final ready = Completer<void>();
     rx.listen((m) => _onMessage(m as List, ready));
-    _iso = await Isolate.spawn(_hostIsolateMain, [rx.sendPort, hostConfigFrom(store), externalCapture != null],
+    _iso = await Isolate.spawn(_hostIsolateMain, [rx.sendPort, hostConfigFrom(store, _publicIp), externalCapture != null],
         debugName: 'localview-host');
     store.addListener(_pushConfig);
     await ready.future.timeout(const Duration(seconds: 10), onTimeout: () {});
     notifyListeners();
   }
 
-  void _pushConfig() => _toIso?.send(['config', hostConfigFrom(store)]);
+  void _pushConfig() => _toIso?.send(['config', hostConfigFrom(store, _publicIp)]);
 
   Future<void> stop() async {
     store.removeListener(_pushConfig);
@@ -338,6 +347,8 @@ class _HostIsolate {
         'name': cfg['name'],
         'os': cfg['os'],
         'share': cfg['share'] == true,
+        if (cfg['publicIp'] != null) 'publicIp': cfg['publicIp'],
+        'port': cfg['port'],
         if (newKey != null) 'pairKey': base64Encode(newKey),
       }).sublist(1));
       toMain.send(['session+', sid, hello['name'] ?? 'Device', hello['os'] ?? '', ip]);

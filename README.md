@@ -2,7 +2,7 @@
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
-Every platform has its own branch and its own GitHub Release, each with a **LAN** and a **WAN** build:
+Every platform has its own branch and its own GitHub Release, each with three builds — **LAN**, **WAN** and **Combined** (LAN + WAN in one app):
 
 | Platform | Branch | Release | Can be controlled | Can control others |
 |---|---|---|---|---|
@@ -15,7 +15,7 @@ Every platform has its own branch and its own GitHub Release, each with a **LAN*
 | Android XR & Meta Quest | [`android-xr`](../../tree/android-xr) | `android-xr-v1.0.0` | ✅ | ✅ |
 | SteamOS (Steam Frame arm64, Steam Deck x64) | [`steamos`](../../tree/steamos) | `steamos-v1.0.0` | ✅ (X11 desktop) | ✅ |
 
-Download from the [Releases page](../../releases). Both devices must run the **same variant** (LAN↔LAN or WAN↔WAN).
+Download from the [Releases page](../../releases). LAN and WAN builds talk to the same variant (LAN↔LAN, WAN↔WAN); **Combined** talks to all three.
 
 ## LAN variant
 
@@ -31,6 +31,17 @@ Discovery uses a UDP broadcast plus a unicast sweep of the local /24 (port 47801
 2. On the device you want to control, set a password (**This device → Set password**). Its address is shown under *How to reach this device*; the app asks the router to forward TCP port **47900** with UPnP automatically (forward it manually if your router has UPnP off).
 3. On your other device, press **+** in the *My devices* box, enter that IP (or `ip:port`) and the password.
 4. A fresh 256-bit pairing key is generated and stored on **both** devices. The added device now shows up in your list, and the controlling device shows up on the other one too (under *My devices*, where you can allow it to control back). Later connections use the key — no password needed. Remove a device to delete its key.
+
+## Combined variant (LAN + WAN in one app)
+
+For devices you use both at home and from far away, install **Localview** (Combined) on both:
+
+* **Devices → Nearby (LAN)** lists devices on the same router (LAN and Combined builds). Click one and type its password.
+* Connecting on the LAN also pairs the devices: a pairing key is generated and saved on both, and the device is added to **Devices → My devices (anywhere)**. Its public IP (reported by the router via UPnP) is saved with it.
+* From **My devices**, tapping a device connects over the LAN when it's nearby and over the internet otherwise — no password needed after the first time.
+* You can still press **+** to add a device by IP and password, exactly like the WAN build.
+
+Combined uses TCP port 47900 (UPnP-forwarded) and answers LAN discovery on UDP 47801, so it interoperates with LAN builds (via discovery) and WAN builds (via IP).
 
 ## Encryption
 

@@ -36,10 +36,10 @@ class DiscoveryResponder {
       if (d == null) return;
       try {
         final q = jsonDecode(utf8.decode(d.data)) as Map;
-        if (q['lv'] != 1 || q['q'] != 1 || q['mode'] != kModeName) return;
+        if (q['lv'] != 1 || q['q'] != 1 || !kHasLan) return;
         final i = info();
         if (i == null) return;
-        _sock!.send(utf8.encode(jsonEncode({'lv': 1, 'r': 1, ...i})), d.address, d.port);
+        _sock!.send(utf8.encode(jsonEncode({'lv': 1, 'r': 1, 'mode': kModeName, ...i})), d.address, d.port);
       } catch (_) {}
     });
   }

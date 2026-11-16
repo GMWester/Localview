@@ -13,7 +13,11 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        mode: [lan, wan]
+        mode: [lan, wan, combined]
+        include:
+          - { mode: lan, label: LAN }
+          - { mode: wan, label: WAN }
+          - { mode: combined, label: Combined }
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -23,14 +27,14 @@ jobs:
           cache: true
       - name: Variant name and bundle id
         run: |
-          M=$(echo ${{ matrix.mode }} | tr a-z A-Z)
+          M="${{ matrix.label }}"
           sed -i '' "s/^PRODUCT_NAME = .*/PRODUCT_NAME = Localview $M/" macos/Runner/Configs/AppInfo.xcconfig
           sed -i '' "s/^PRODUCT_BUNDLE_IDENTIFIER = .*/PRODUCT_BUNDLE_IDENTIFIER = io.localview.localview.${{ matrix.mode }}/" macos/Runner/Configs/AppInfo.xcconfig
       - run: flutter pub get
       - run: flutter build macos --release --dart-define=LV_MODE=${{ matrix.mode }}
       - name: Package
         run: |
-          M=$(echo ${{ matrix.mode }} | tr a-z A-Z)
+          M="${{ matrix.label }}"
           cd build/macos/Build/Products/Release
           codesign --force --deep -s - "Localview $M.app"
           ditto -c -k --keepParent "Localview $M.app" "$GITHUB_WORKSPACE/Localview-$M-macos-universal.zip"
@@ -59,5 +63,6 @@ jobs:
             macOS 10.15+ (Apple Silicon and Intel). Unzip, move to Applications, right-click → Open the first time (ad-hoc signed). Grant Screen Recording and Accessibility in System Settings to be controlled. Remote drives appear in Finder.
 
             **LAN** builds list devices on the same router; pick one and type the password set on it.
+            **Combined** builds do both in one app: nearby devices are listed automatically, and a device you connect to once on the LAN is also saved to *My devices* so you can reach it from anywhere. Combined works with LAN and WAN builds too.
             **WAN** builds connect over the internet: press **+**, enter the other device's IP and password; a pairing key is generated and stored on both devices.
-            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). Both devices must run the same variant.
+            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). LAN and WAN builds need the same variant on both devices (or Combined on either side).

@@ -40,7 +40,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final pages = [DevicesPage(app: widget.app), ThisDevicePage(app: widget.app)];
     final dests = [
-      (Icons.devices_other, kIsWan ? 'My devices' : 'Nearby devices'),
+      (Icons.devices_other, kIsCombined ? 'Devices' : kHasWan ? 'My devices' : 'Nearby devices'),
       (Icons.computer, 'This device'),
     ];
     final wide = MediaQuery.sizeOf(context).width > 720;
@@ -49,7 +49,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       const SizedBox(width: 10),
       Text('Localview'),
       const SizedBox(width: 8),
-      Chip(label: Text(kModeName.toUpperCase()), visualDensity: VisualDensity.compact),
+      Chip(label: Text(kModeLabel), visualDensity: VisualDensity.compact),
     ]);
     if (wide) {
       return Scaffold(

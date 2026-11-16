@@ -20,6 +20,8 @@ class PairedDevice {
     required this.key,
     required this.allowIncoming,
     required this.outgoing,
+    this.lanAddress,
+    this.lanPort,
   });
 
   final String id;
@@ -35,6 +37,10 @@ class PairedDevice {
   /// Did *this* device add the peer (so it is something we control)?
   bool outgoing;
 
+  /// Last address seen on the local network (combined builds prefer it when the device is nearby).
+  String? lanAddress;
+  int? lanPort;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
@@ -44,6 +50,8 @@ class PairedDevice {
         'key': base64Encode(key),
         'allowIncoming': allowIncoming,
         'outgoing': outgoing,
+        if (lanAddress != null) 'lanAddress': lanAddress,
+        if (lanPort != null) 'lanPort': lanPort,
       };
 
   factory PairedDevice.fromJson(Map<String, dynamic> j) => PairedDevice(
@@ -55,6 +63,8 @@ class PairedDevice {
         key: base64Decode(j['key'] as String),
         allowIncoming: j['allowIncoming'] as bool? ?? false,
         outgoing: j['outgoing'] as bool? ?? false,
+        lanAddress: j['lanAddress'] as String?,
+        lanPort: j['lanPort'] as int?,
       );
 }
 

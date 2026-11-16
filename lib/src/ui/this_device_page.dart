@@ -167,11 +167,11 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                 ListTile(
                   dense: true,
                   leading: const Icon(Icons.lan_outlined),
-                  title: SelectableText(kIsWan ? '$ip:$port' : ip),
+                  title: SelectableText(kHasWan ? '$ip:$port' : ip),
                   subtitle: const Text('Local network'),
-                  trailing: IconButton(icon: const Icon(Icons.copy), onPressed: () => Clipboard.setData(ClipboardData(text: kIsWan ? '$ip:$port' : ip))),
+                  trailing: IconButton(icon: const Icon(Icons.copy), onPressed: () => Clipboard.setData(ClipboardData(text: kHasWan ? '$ip:$port' : ip))),
                 ),
-              if (kIsWan) ...[
+              if (kHasWan) ...[
                 ListTile(
                   dense: true,
                   leading: const Icon(Icons.public),
@@ -298,7 +298,7 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
           ),
           Padding(
             padding: const EdgeInsets.all(8),
-            child: Text('Localview ${kModeName.toUpperCase()} $kAppVersion · end-to-end encrypted (X25519 + ChaCha20-Poly1305)',
+            child: Text('Localview $kModeLabel $kAppVersion · end-to-end encrypted (X25519 + ChaCha20-Poly1305)',
                 textAlign: TextAlign.center, style: tt.bodySmall),
           ),
         ]);

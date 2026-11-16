@@ -20,6 +20,9 @@ class AppController extends ChangeNotifier {
   final AppStore store;
   late final HostService host;
   DiscoveryResponder? _responder;
+
+  /// LAN discovery (LAN and combined builds).
+  DiscoveryScanner? scanner;
   final Upnp upnp = Upnp();
   final DriveMounter drives = DriveMounter();
   final Map<String, String> mountedDrives = {}; // key -> location text
@@ -56,19 +59,23 @@ class AppController extends ChangeNotifier {
     _responder = DiscoveryResponder(() => store.hostEnabled && host.running
         ? {'id': store.deviceId, 'name': store.deviceName, 'os': kOsName, 'port': host.boundPort ?? store.tcpPort, 'pw': store.hasPassword}
         : null);
-    if (kIsLan) await _responder!.start();
+    if (kHasLan) {
+      await _responder!.start();
+      scanner = DiscoveryScanner(store.deviceId);
+      await scanner!.start();
+    }
     notifyListeners();
   }
 
   Future<void> startHosting() async {
     await host.start();
-    if (kIsWan && store.upnpEnabled) unawaited(refreshUpnp());
+    if (kHasWan && store.upnpEnabled) unawaited(refreshUpnp());
     notifyListeners();
   }
 
   Future<void> stopHosting() async {
     await host.stop();
-    if (kIsWan) await upnp.unmapPort(store.tcpPort);
+    if (kHasWan) await upnp.unmapPort(store.tcpPort);
     notifyListeners();
   }
 
@@ -88,6 +95,7 @@ class AppController extends ChangeNotifier {
     await upnp.mapPort(store.tcpPort);
     localIps = await localAddresses();
     upnpBusy = false;
+    host.publicIp = upnp.externalIp;
     notifyListeners();
   }
 
@@ -110,6 +118,7 @@ class AppController extends ChangeNotifier {
   Future<void> shutdown() async {
     await drives.unmountAll();
     _responder?.stop();
+    scanner?.dispose();
     await host.stop();
   }
 }

@@ -13,7 +13,11 @@ jobs:
     # arm64 for Steam Frame, x64 for Steam Deck
     strategy:
       matrix:
-        mode: [lan, wan]
+        mode: [lan, wan, combined]
+        include:
+          - { mode: lan, label: LAN }
+          - { mode: wan, label: WAN }
+          - { mode: combined, label: Combined }
         arch: [x64, arm64]
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
     steps:
@@ -27,7 +31,7 @@ jobs:
       - run: flutter build linux --release --dart-define=LV_MODE=${{ matrix.mode }}
       - name: Package
         run: |
-          M=$(echo ${{ matrix.mode }} | tr a-z A-Z)
+          M="${{ matrix.label }}"
           D=Localview-$M-steamos-${{ matrix.arch }}
           cp -r build/linux/*/release/bundle "$D"
           cp assets/icon.png "$D/localview.png"
@@ -75,5 +79,6 @@ jobs:
             SteamOS 3 — arm64 for Steam Frame, x64 for Steam Deck. In Desktop Mode extract and run `./install.sh`, then Steam → Add a Non-Steam Game → Localview to use it in Game Mode/VR.
 
             **LAN** builds list devices on the same router; pick one and type the password set on it.
+            **Combined** builds do both in one app: nearby devices are listed automatically, and a device you connect to once on the LAN is also saved to *My devices* so you can reach it from anywhere. Combined works with LAN and WAN builds too.
             **WAN** builds connect over the internet: press **+**, enter the other device's IP and password; a pairing key is generated and stored on both devices.
-            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). Both devices must run the same variant.
+            Both variants are end-to-end encrypted (X25519 + ChaCha20-Poly1305). LAN and WAN builds need the same variant on both devices (or Combined on either side).

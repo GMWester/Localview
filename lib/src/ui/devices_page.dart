@@ -12,7 +12,19 @@ class DevicesPage extends StatelessWidget {
   final AppController app;
 
   @override
-  Widget build(BuildContext context) => kIsWan ? _WanDevices(app: app) : _LanDevices(app: app);
+  Widget build(BuildContext context) {
+    if (!kIsCombined) return kHasWan ? _WanDevices(app: app) : _LanDevices(app: app);
+    return DefaultTabController(
+      length: 2,
+      child: Column(children: [
+        const TabBar(tabs: [
+          Tab(icon: Icon(Icons.wifi), text: 'Nearby (LAN)'),
+          Tab(icon: Icon(Icons.public), text: 'My devices (anywhere)'),
+        ]),
+        Expanded(child: TabBarView(children: [_LanDevices(app: app), _WanDevices(app: app)])),
+      ]),
+    );
+  }
 }
 
 // ---------------------------------------------------------------- LAN
@@ -25,50 +37,48 @@ class _LanDevices extends StatefulWidget {
 }
 
 class _LanDevicesState extends State<_LanDevices> {
-  late final DiscoveryScanner scanner = DiscoveryScanner(widget.app.store.deviceId);
-
-  @override
-  void initState() {
-    super.initState();
-    scanner.start();
-  }
-
-  @override
-  void dispose() {
-    scanner.dispose();
-    super.dispose();
-  }
+  DiscoveryScanner get scanner => widget.app.scanner!;
 
   Future<void> _open(LanDevice d) async {
+    final paired = widget.app.store.findPaired(d.id);
+    if (kIsCombined && paired != null) {
+      // Already in "My devices": the stored pairing key is enough.
+      await connectTo(context, widget.app, host: d.address, port: d.port, paired: paired, viaLan: true);
+      return;
+    }
     if (!d.hasPassword) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('${d.name} has not set a password yet (This device → Password).')));
       return;
     }
     final pw = await askPassword(context, d.name);
     if (pw == null || pw.isEmpty || !mounted) return;
-    await connectTo(context, widget.app, host: d.address, port: d.port, password: pw);
+    // Combined builds also pair, so the device is reachable from anywhere afterwards.
+    await connectTo(context, widget.app, host: d.address, port: d.port, password: pw, pair: kIsCombined, viaLan: true);
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: scanner,
+      listenable: Listenable.merge([scanner, widget.app.store]),
       builder: (context, _) {
         final list = scanner.list;
         return RefreshIndicator(
           onRefresh: scanner.scan,
           child: ListView(padding: const EdgeInsets.all(16), children: [
-            Text('Devices on this network running Localview LAN', style: Theme.of(context).textTheme.titleMedium),
+            Text(kIsCombined ? 'Devices on this network running Localview' : 'Devices on this network running Localview LAN', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            const Text('Select a device and enter the password that was set on it. All traffic is end-to-end encrypted.'),
+            Text(kIsCombined
+                ? 'Select a device and enter its password. It is then also added to My devices, so you can reach it from anywhere without the password.'
+                : 'Select a device and enter the password that was set on it. All traffic is end-to-end encrypted.'),
             const SizedBox(height: 12),
             if (list.isEmpty)
-              const Card(
+              Card(
                 child: ListTile(
-                  leading: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
-                  title: Text('Searching…'),
-                  subtitle: Text('Make sure the other device has Localview LAN open and is on the same router.'),
+                  leading: const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                  title: const Text('Searching…'),
+                  subtitle: Text('Make sure the other device has Localview ${kIsCombined ? '(LAN or LAN + WAN)' : 'LAN'} open and is on the same router.'),
                 ),
               ),
             for (final d in list)
@@ -76,8 +86,9 @@ class _LanDevicesState extends State<_LanDevices> {
                 child: ListTile(
                   leading: Icon(osIcon(d.os), size: 32),
                   title: Text(d.name),
-                  subtitle: Text('${d.address} · ${d.os}${d.hasPassword ? '' : ' · no password set'}'),
-                  trailing: const Icon(Icons.lock_outline),
+                  subtitle: Text('${d.address} · ${d.os}${d.hasPassword ? '' : ' · no password set'}'
+                      '${kIsCombined && widget.app.store.findPaired(d.id) != null ? ' · in My devices' : ''}'),
+                  trailing: Icon(kIsCombined && widget.app.store.findPaired(d.id) != null ? Icons.key : Icons.lock_outline),
                   onTap: () => _open(d),
                 ),
               ),
@@ -142,7 +153,7 @@ class _WanDevices extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: app.store,
+      listenable: Listenable.merge([app.store, if (app.scanner != null) app.scanner!]),
       builder: (context, _) {
         final devices = app.store.paired;
         return Scaffold(
@@ -206,7 +217,9 @@ class _PairedTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nearby = app.scanner?.devices.containsKey(d.id) ?? false;
     final subtitle = [
+      if (nearby) 'nearby (LAN)',
       '${d.address}${d.port == kDefaultTcpPort ? '' : ':${d.port}'}',
       if (d.outgoing) 'you control it',
       if (d.allowIncoming) 'it can control this device',
@@ -216,7 +229,14 @@ class _PairedTile extends StatelessWidget {
       leading: Icon(osIcon(d.os), size: 32),
       title: Text(d.name),
       subtitle: Text(subtitle),
-      onTap: () => connectTo(context, app, host: d.address, port: d.port, paired: d),
+      onTap: () {
+        final near = app.scanner?.devices[d.id];
+        if (near != null) {
+          connectTo(context, app, host: near.address, port: near.port, paired: d, viaLan: true);
+        } else {
+          connectTo(context, app, host: d.address, port: d.port, paired: d);
+        }
+      },
       trailing: PopupMenuButton<String>(
         onSelected: (v) async {
           switch (v) {

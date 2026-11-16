@@ -1,15 +1,19 @@
 import 'dart:io';
 
-/// Build-time variant. Built with `--dart-define=LV_MODE=lan` or `wan`.
-const String kModeName = String.fromEnvironment('LV_MODE', defaultValue: 'lan');
-final bool kIsWan = kModeName.toLowerCase() == 'wan';
-final bool kIsLan = !kIsWan;
+/// Build-time variant: `--dart-define=LV_MODE=lan`, `wan` or `combined`
+/// (combined = LAN discovery and WAN pairing in one app).
+const String _rawMode = String.fromEnvironment('LV_MODE', defaultValue: 'lan');
+final String kModeName = switch (_rawMode.toLowerCase()) { 'wan' => 'wan', 'combined' || 'all' || 'both' => 'combined', _ => 'lan' };
+final bool kIsCombined = kModeName == 'combined';
+final bool kHasLan = kModeName != 'wan';
+final bool kHasWan = kModeName != 'lan';
+String get kModeLabel => switch (kModeName) { 'wan' => 'WAN', 'combined' => 'LAN + WAN', _ => 'LAN' };
 
 const String kAppVersion = '1.0.0';
 const int kProtocolVersion = 1;
 
 /// LAN and WAN variants use different ports so both can run on one machine.
-int get kDefaultTcpPort => kIsWan ? 47900 : 47800;
+int get kDefaultTcpPort => kHasWan ? 47900 : 47800;
 const int kDiscoveryPort = 47801;
 
 String get kOsName {

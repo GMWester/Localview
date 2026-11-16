@@ -31,13 +31,13 @@ class LocalviewApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final seed = kIsWan ? const Color(0xFF6C4BFF) : const Color(0xFF0E9F8E);
+    final seed = switch (kModeName) { 'wan' => const Color(0xFF6C4BFF), 'combined' => const Color(0xFF2F6FED), _ => const Color(0xFF0E9F8E) };
     return ListenableBuilder(
       listenable: app.store,
       builder: (context, _) {
         final t = app.store.theme;
         return MaterialApp(
-          title: 'Localview ${kModeName.toUpperCase()}',
+          title: 'Localview $kModeLabel',
           debugShowCheckedModeBanner: false,
           theme: buildTheme(seed, Brightness.light),
           darkTheme: buildTheme(seed, Brightness.dark, oled: t == 'oled'),
