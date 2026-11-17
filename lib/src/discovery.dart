@@ -7,10 +7,11 @@ import 'package:flutter/foundation.dart';
 import 'config.dart';
 
 class LanDevice {
-  LanDevice(this.id, this.name, this.os, this.address, this.port, this.hasPassword, this.lastSeen);
+  LanDevice(this.id, this.name, this.os, this.address, this.port, this.hasPassword, this.lastSeen, {this.totp = false});
   final String id, name, os, address;
   final int port;
   final bool hasPassword;
+  final bool totp;
   DateTime lastSeen;
 }
 
@@ -72,7 +73,7 @@ class DiscoveryScanner extends ChangeNotifier {
         final id = r['id'] as String;
         if (id == myId) return;
         devices[id] = LanDevice(id, r['name'] as String, r['os'] as String? ?? '', d.address.address,
-            r['port'] as int, r['pw'] == true, DateTime.now());
+            r['port'] as int, r['pw'] == true, DateTime.now(), totp: r['totp'] == true);
         notifyListeners();
       } catch (_) {}
     });

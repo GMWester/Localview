@@ -52,6 +52,8 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{
 Filename: "{tmp}\ViGEmBusSetup.exe"; Parameters: "/passive /norestart"; Flags: waituntilterminated; Tasks: vigem; StatusMsg: "Installing the ViGEmBus controller driver..."
 #endif
 Filename: "{app}\{#ExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
+; In-app updates run the installer silently: start the new version afterwards.
+Filename: "{app}\{#ExeName}"; Flags: nowait; Check: WizardSilent
 
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName}"""; Flags: runhidden; RunOnceId: "LocalviewFirewall"

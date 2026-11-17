@@ -36,11 +36,15 @@ class LocalviewApp extends StatelessWidget {
       listenable: app.store,
       builder: (context, _) {
         final t = app.store.theme;
+        animationsEnabled = app.store.animations;
         return MaterialApp(
           title: 'Localview $kModeLabel',
           debugShowCheckedModeBanner: false,
-          theme: buildTheme(seed, Brightness.light),
-          darkTheme: buildTheme(seed, Brightness.dark, oled: t == 'oled'),
+          theme: applyAnimationPreference(buildTheme(seed, Brightness.light)),
+          darkTheme: applyAnimationPreference(buildTheme(seed, Brightness.dark, oled: t == 'oled')),
+          builder: (context, child) => animationsEnabled
+              ? child!
+              : MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: true), child: child!),
           themeMode: switch (t) {
             'light' => ThemeMode.light,
             'dark' || 'oled' => ThemeMode.dark,
