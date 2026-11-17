@@ -63,6 +63,12 @@ class _RemotePageState extends State<RemotePage> {
     _virtualCursor = widget.app.isTv;
     s.addListener(_onSession);
     widget.app.background.hidden.addListener(_onWindowHidden);
+    s.onRotateResult = (err) {
+      if (err == null || !mounted) return;
+      _snack(err == 'permission'
+          ? 'Allow "Modify system settings" for Localview on ${s.peerName} (the screen is open there), then press rotate again.'
+          : 'Could not rotate ${s.peerName}: $err');
+    };
     s.onClipboard = (t) {
       Clipboard.setData(ClipboardData(text: t));
       _snack('Remote clipboard copied to this device.');
@@ -554,6 +560,12 @@ class _RemotePageState extends State<RemotePage> {
                   IconButton(tooltip: 'Home', icon: const Icon(Icons.circle_outlined), onPressed: () => s.send(specialMsg(Special.home))),
                   IconButton(tooltip: 'Recents', icon: const Icon(Icons.crop_square), onPressed: () => s.send(specialMsg(Special.recents))),
                 ],
+                if (s.peerRotate)
+                  IconButton(
+                    tooltip: s.screenW > s.screenH ? 'Switch the device to vertical' : 'Switch the device to horizontal',
+                    icon: Icon(s.screenW > s.screenH ? Icons.stay_current_portrait : Icons.stay_current_landscape),
+                    onPressed: () => s.rotate(s.screenW > s.screenH ? 'portrait' : 'landscape'),
+                  ),
                 if (s.monitors.length > 1)
                   PopupMenuButton<String>(
                     tooltip: 'Monitor${s.monitor == null ? '' : ': ${s.monitor!.name}'}',
@@ -640,6 +652,8 @@ class _RemotePageState extends State<RemotePage> {
                         setState(() => _toolbar = false);
                       case 'adb':
                         await showAdbDialog(context, s);
+                      case 'autoRotate':
+                        s.rotate('auto');
                     }
                   },
                   itemBuilder: (_) => [
@@ -653,6 +667,7 @@ class _RemotePageState extends State<RemotePage> {
                     const PopupMenuItem(value: 'esc', child: Text('Esc')),
                     const PopupMenuItem(value: 'refresh', child: Text('Refresh screen')),
                     if (s.peerAdb) const PopupMenuItem(value: 'adb', child: Text('ADB (wireless debugging)…')),
+                    if (s.peerRotate) const PopupMenuItem(value: 'autoRotate', child: Text('Device: auto-rotate')),
                     if (s.peerRtc)
                       PopupMenuItem(value: 'gameOff', child: Text(_rtc != null ? 'Switch to compatibility mode' : 'Switch to game mode')),
                     CheckedPopupMenuItem(value: 'stats', checked: widget.app.store.showStreamStats, child: const Text('Show stream stats')),

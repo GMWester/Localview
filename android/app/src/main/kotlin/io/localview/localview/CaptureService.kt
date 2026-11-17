@@ -22,13 +22,15 @@ import android.view.WindowManager
 
 /** Foreground service that mirrors the screen into an ImageReader (MediaProjection). */
 class CaptureService : Service() {
-    class Frame(val width: Int, val height: Int, val data: ByteArray)
+    /** One captured screen image (RGBA); [seq] increases with every new image. */
+    class Frame(val width: Int, val height: Int, val data: ByteArray, val seq: Long)
 
     companion object {
         const val EXTRA_CODE = "code"
         const val EXTRA_DATA = "data"
         @Volatile var latest: Frame? = null
         @Volatile var running = false
+        private var frameCounter = 0L
         const val MAX_SIDE = 1920
     }
 
@@ -64,45 +66,79 @@ class CaptureService : Service() {
             override fun onStop() { stopSelf() }
         }, handler)
 
+        val (w, h) = captureSize()
+        val r = newReader(w, h)
+        val dpi = resources.displayMetrics.densityDpi
+        display = p.createVirtualDisplay("localview", w, h, dpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, r.surface, null, handler)
+        // Follow rotation (turning the phone, or a viewer switching portrait / landscape).
+        val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        dm.registerDisplayListener(displayListener, handler)
+        running = true
+        return START_NOT_STICKY
+    }
+
+    private var captureW = 0
+    private var captureH = 0
+
+    /** Current screen size (follows rotation), scaled to at most MAX_SIDE, even numbers. */
+    private fun captureSize(): Pair<Int, Int> {
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val metrics = DisplayMetrics()
-        val (sw, sh) = if (Build.VERSION.SDK_INT >= 30) {
-            val b = wm.maximumWindowMetrics.bounds; Pair(b.width(), b.height())
-        } else {
-            @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(metrics); Pair(metrics.widthPixels, metrics.heightPixels)
-        }
+        @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(metrics)
+        val sw = metrics.widthPixels
+        val sh = metrics.heightPixels
         val scale = minOf(1.0, MAX_SIDE.toDouble() / maxOf(sw, sh))
-        val w = ((sw * scale).toInt() / 2) * 2
-        val h = ((sh * scale).toInt() / 2) * 2
-        val dpi = resources.displayMetrics.densityDpi
+        return Pair(((sw * scale).toInt() / 2) * 2, ((sh * scale).toInt() / 2) * 2)
+    }
+
+    private fun newReader(w: Int, h: Int): ImageReader {
+        captureW = w
+        captureH = h
         val r = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
-        reader = r
         r.setOnImageAvailableListener({ ir ->
             val img = try { ir.acquireLatestImage() } catch (_: Exception) { null } ?: return@setOnImageAvailableListener
             try {
                 val plane = img.planes[0]
                 val buf = plane.buffer
                 val rowStride = plane.rowStride
-                val out = ByteArray(w * h * 4)
-                if (rowStride == w * 4) {
+                val iw = img.width
+                val ih = img.height
+                val out = ByteArray(iw * ih * 4)
+                if (rowStride == iw * 4) {
                     buf.get(out, 0, out.size)
                 } else {
-                    for (y in 0 until h) {
+                    for (y in 0 until ih) {
                         buf.position(y * rowStride)
-                        buf.get(out, y * w * 4, w * 4)
+                        buf.get(out, y * iw * 4, iw * 4)
                     }
                 }
-                latest = Frame(w, h, out)
+                latest = Frame(iw, ih, out, ++frameCounter)
             } finally {
                 img.close()
             }
         }, handler)
-        display = p.createVirtualDisplay("localview", w, h, dpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, r.surface, null, handler)
-        running = true
-        return START_NOT_STICKY
+        reader = r
+        return r
+    }
+
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) {}
+        override fun onDisplayRemoved(id: Int) {}
+        override fun onDisplayChanged(id: Int) {
+            if (id != android.view.Display.DEFAULT_DISPLAY) return
+            val (w, h) = captureSize()
+            if (w == captureW && h == captureH) return
+            val vd = display ?: return
+            val old = reader
+            val r = newReader(w, h)
+            vd.resize(w, h, resources.displayMetrics.densityDpi)
+            vd.surface = r.surface
+            old?.close()
+        }
     }
 
     override fun onDestroy() {
+        try { (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).unregisterDisplayListener(displayListener) } catch (_: Exception) {}
         running = false
         latest = null
         display?.release()
