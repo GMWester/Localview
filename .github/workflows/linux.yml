@@ -45,14 +45,14 @@ jobs:
         shell: bash
         run: |
           echo "VERSION=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
-      - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libpulse-dev file
+      - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libpulse-dev file rpm
       - name: Install Flutter
         run: |
           git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git "$HOME/flutter"
           echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
       - run: flutter config --no-analytics && flutter pub get
       - run: flutter build linux --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }} --dart-define=LV_FLAVOR=linux
-      - name: Package (tar.gz, AppImage, .deb)
+      - name: Package (tar.gz, AppImage, .deb, .rpm)
         run: |
           M="${{ matrix.label }}"
           D=Localview-$M-linux-${{ matrix.arch }}
@@ -64,6 +64,8 @@ jobs:
           sh installer/build-appimage.sh "$B" "${{ matrix.mode }}" "$M" "$AIARCH" "$D.AppImage"
           DEBARCH=$([ "${{ matrix.arch }}" = arm64 ] && echo arm64 || echo amd64)
           sh installer/build-deb.sh "$B" "${{ matrix.mode }}" "${{ matrix.label }}" "$DEBARCH" "$VERSION" "localview-${{ matrix.mode }}_${VERSION}_${DEBARCH}.deb"
+          RPMARCH=$([ "${{ matrix.arch }}" = arm64 ] && echo aarch64 || echo x86_64)
+          sh installer/build-rpm.sh "$B" "${{ matrix.mode }}" "${{ matrix.label }}" "$RPMARCH" "$VERSION" "localview-${{ matrix.mode }}-${VERSION}-1.${RPMARCH}.rpm"
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.mode }}-${{ matrix.arch }}
@@ -71,6 +73,7 @@ jobs:
             Localview-*.tar.gz
             Localview-*.AppImage
             localview-*.deb
+            localview-*.rpm
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -124,7 +127,7 @@ jobs:
             |---|---|---|
             | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup.exe` | `…-windows-x64.zip` |
             | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
-            | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
+            | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` (Debian/Ubuntu), `localview-<variant>-<version>-1.<arch>.rpm` (Fedora/RHEL/openSUSE) | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
             | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
             | Android phones/tablets (Android 7.0+) | `Localview-<variant>-android.apk` (all processors) | per processor: `…-android-arm64.apk`, `…-android-armv7.apk` (older 32-bit devices), `…-android-x86_64.apk` |
             | Android TV / Google TV | `Localview-<variant>-android-tv.apk` (all processors) | per processor: `…-android-tv-armv7.apk` (most TVs), `…-android-tv-arm64.apk`, `…-android-tv-x86_64.apk` |

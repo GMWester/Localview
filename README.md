@@ -7,7 +7,7 @@ Every platform has its own branch, and every branch publishes into **one release
 | Platform | Branch | Installer | Portable | Can be controlled | Can control others |
 |---|---|---|---|---|---|
 | Windows 10/11 | [`main`](../../tree/main) | `.exe` setup (Inno Setup, optional controller driver) | `.zip` | ✅ | ✅ |
-| Linux x64 / arm64 | [`linux`](../../tree/linux) | `.deb` | AppImage, `.tar.gz` | ✅ (X11 session) | ✅ |
+| Linux x64 / arm64 | [`linux`](../../tree/linux) | `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL/openSUSE) | AppImage, `.tar.gz` | ✅ (X11 session) | ✅ |
 | macOS | [`macos`](../../tree/macos) | `.dmg` | `.zip` | ✅ | ✅ |
 | Android 7.0+ (ARMv7 32-bit, ARM64, x86-64) | [`android`](../../tree/android) | `.apk` (all-in-one or per processor) | | ✅ | ✅ |
 | iOS / iPadOS | [`ios`](../../tree/ios) | `.ipa` (sideload) | | ❌ (Apple forbids input injection) | ✅ |
@@ -125,7 +125,7 @@ The in-app file browser (folder button in the session toolbar) works on every pl
 
 * **Windows**: run `Localview-<variant>-windows-x64-setup.exe`. It adds Start menu/desktop shortcuts, an optional sign-in auto-start (so the PC is reachable), a firewall rule, and optionally the ViGEmBus controller driver. The `.zip` is the same app without installation.
 * **macOS**: open the `.dmg` and drag Localview to Applications.
-* **Linux**: `sudo apt install ./localview-<variant>_<version>_<arch>.deb`, or make the AppImage executable and run it.
+* **Linux**: Debian/Ubuntu `sudo apt install ./localview-<variant>_<version>_<arch>.deb`; Fedora/RHEL `sudo dnf install ./localview-<variant>-<version>-1.<arch>.rpm`; or make the AppImage executable and run it.
 * **SteamOS**: in Desktop Mode, download the AppImage for your device (arm64 for Steam Frame, x64 for Steam Deck), mark it executable, then add it to Steam as a Non-Steam Game.
 * **Android / TV / XR / Quest**: install the APK (allow installs from unknown sources; on TV use Downloader or `adb install`; on Quest use SideQuest or `adb install`).
 * **iOS**: sideload the unsigned IPA with AltStore/Sideloadly or sign it with your developer account.

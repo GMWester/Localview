@@ -41,11 +41,16 @@ bool get _arm64 {
 }
 
 /// How this copy was installed on Linux.
-enum LinuxInstall { appImage, deb, archive }
+enum LinuxInstall { appImage, deb, rpm, archive }
 
 LinuxInstall get linuxInstall {
   if ((Platform.environment['APPIMAGE'] ?? '').isNotEmpty) return LinuxInstall.appImage;
-  if (Platform.resolvedExecutable.startsWith('/opt/localview-')) return LinuxInstall.deb;
+  if (Platform.resolvedExecutable.startsWith('/opt/localview-')) {
+    try {
+      if (Process.runSync('rpm', ['-q', 'localview-$kModeName']).exitCode == 0) return LinuxInstall.rpm;
+    } catch (_) {}
+    return LinuxInstall.deb;
+  }
   return LinuxInstall.archive;
 }
 
@@ -89,6 +94,7 @@ RegExp? assetPatternForThisBuild() {
     return switch (linuxInstall) {
       LinuxInstall.appImage => RegExp('^${e('Localview-$l-$plat-$arch.AppImage')}\$'),
       LinuxInstall.deb => RegExp('^${e('localview-${kModeName}_')}.+_${_arm64 ? 'arm64' : 'amd64'}\\.deb\$'),
+      LinuxInstall.rpm => RegExp('^${e('localview-$kModeName-')}.+\\.${_arm64 ? 'aarch64' : 'x86_64'}\\.rpm\$'),
       LinuxInstall.archive => RegExp('^${e('Localview-$l-$plat-$arch.tar.gz')}\$'),
     };
   }
@@ -213,6 +219,12 @@ Future<String?> installUpdate(File f) async {
         if (r.exitCode == 0) return 'Updated. Restart Localview to use the new version.';
         await Process.run('xdg-open', [p]);
         return 'Install the opened package (or run: sudo apt install "$p"), then restart Localview.';
+      case LinuxInstall.rpm:
+        var r = await Process.run('pkexec', ['dnf', 'install', '-y', p]);
+        if (r.exitCode != 0) r = await Process.run('pkexec', ['rpm', '-U', '--replacepkgs', p]);
+        if (r.exitCode == 0) return 'Updated. Restart Localview to use the new version.';
+        await Process.run('xdg-open', [p]);
+        return 'Install the opened package (or run: sudo dnf install "$p"), then restart Localview.';
       case LinuxInstall.archive:
         final dest = File(Platform.resolvedExecutable).parent.path;
         final r = await Process.run('tar', ['xzf', p, '--strip-components=1', '-C', dest]);
