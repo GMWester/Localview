@@ -43,8 +43,8 @@ Future<ClientSession?> connectTo(
     animationStyle: dialogAnimation(),
     context: context,
     barrierDismissible: false,
-    builder: (_) => const AlertDialog(
-      content: Row(children: [CircularProgressIndicator(), SizedBox(width: 20), Expanded(child: Text('Connecting securely…'))]),
+    builder: (_) => AlertDialog(
+      content: Row(children: [busyIndicator(), const SizedBox(width: 20), const Expanded(child: Text('Connecting securely…'))]),
     ),
   );
   ClientSession? session;

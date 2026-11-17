@@ -1,10 +1,13 @@
 #pragma once
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 #include "vrproto.h"
 
-// Written by the Localview app (%LOCALAPPDATA%\Localview\vr_session.txt) before it starts SteamVR.
+// Written by the Localview app before it starts SteamVR:
+//   Windows: %LOCALAPPDATA%\Localview\vr_session.txt
+//   Linux / SteamOS: ~/.config/localview/vr_session.txt (or $LOCALVIEW_VR_SESSION)
 struct VrSession {
   std::string id;
   uint8_t key[32] = {};
@@ -18,5 +21,5 @@ struct VrSession {
   std::string deviceName = "Headset";
 };
 
-std::wstring SessionPath();
+std::filesystem::path SessionPath();
 bool LoadSession(VrSession* out);

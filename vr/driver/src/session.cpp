@@ -1,13 +1,18 @@
 #include "session.h"
 
+#ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
+#endif
 
+#include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 
-std::wstring SessionPath() {
+std::filesystem::path SessionPath() {
+#ifdef _WIN32
   PWSTR p = nullptr;
   std::wstring out;
   if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p))) {
@@ -15,6 +20,11 @@ std::wstring SessionPath() {
   }
   CoTaskMemFree(p);
   return out;
+#else
+  if (const char* p = getenv("LOCALVIEW_VR_SESSION"); p && *p) return p;
+  const char* home = getenv("HOME");
+  return std::filesystem::path(home ? home : "") / ".config/localview/vr_session.txt";
+#endif
 }
 
 static int HexVal(char c) {
@@ -25,7 +35,7 @@ static int HexVal(char c) {
 }
 
 bool LoadSession(VrSession* s) {
-  std::ifstream f{std::filesystem::path{SessionPath()}};
+  std::ifstream f{SessionPath()};
   if (!f) return false;
   bool haveKey = false;
   std::string line;
@@ -35,6 +45,7 @@ bool LoadSession(VrSession* s) {
     std::string k = line.substr(0, eq), v = line.substr(eq + 1);
     while (!v.empty() && (v.back() == '\r' || v.back() == ' ')) v.pop_back();
     std::istringstream in(v);
+    try {
     if (k == "id") s->id = v;
     else if (k == "key" && v.size() == 64) {
       haveKey = true;
@@ -57,6 +68,9 @@ bool LoadSession(VrSession* s) {
     } else if (k == "eye_l" || k == "eye_r") {
       lvvr::Pose& p = s->eyeToHead[k == "eye_r"];
       in >> p.px >> p.py >> p.pz >> p.qx >> p.qy >> p.qz >> p.qw;
+    }
+    } catch (...) {
+      // Malformed value: keep the default.
     }
   }
   // Keep dimensions encoder friendly (multiple of 16, SBS width <= 4096 for H.264).

@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstring>
 
 #include "devices.h"
 
@@ -16,25 +17,37 @@ vr::EVRInitError Hmd::Activate(uint32_t id) {
   props->SetFloatProperty(c, vr::Prop_UserHeadToEyeDepthMeters_Float, 0.f);
   props->SetFloatProperty(c, vr::Prop_DisplayFrequency_Float, s_.refreshHz);
   props->SetFloatProperty(c, vr::Prop_SecondsFromVsyncToPhotons_Float, 0.005f);
-  props->SetUint64Property(c, vr::Prop_GraphicsAdapterLuid_Uint64, comp_->AdapterLuid());
   props->SetBoolProperty(c, vr::Prop_IsOnDesktop_Bool, false);
   props->SetBoolProperty(c, vr::Prop_DisplayDebugMode_Bool, false);
   props->SetBoolProperty(c, vr::Prop_HasDisplayComponent_Bool, true);
+#ifdef _WIN32
+  props->SetUint64Property(c, vr::Prop_GraphicsAdapterLuid_Uint64, comp_->AdapterLuid());
   props->SetBoolProperty(c, vr::Prop_HasDriverDirectModeComponent_Bool, true);
   props->SetBoolProperty(c, vr::Prop_DriverDirectModeSendsVsyncEvents_Bool, true);
+#else
+  props->SetBoolProperty(c, vr::Prop_HasDriverDirectModeComponent_Bool, false);
+  // The Localview stream is already late-latched by the headset's own reprojection;
+  // SteamVR's Linux async reprojection does not work with a virtual display.
+  vr::VRSettings()->SetBool(vr::k_pch_SteamVR_Section, vr::k_pch_SteamVR_EnableLinuxVulkanAsync_Bool, false);
+  vr::VRSettings()->SetBool(vr::k_pch_SteamVR_Section, vr::k_pch_SteamVR_DisableAsyncReprojection_Bool, true);
+#endif
   props->SetStringProperty(c, vr::Prop_ExpectedControllerType_String, "oculus_touch");
   vr::VRServerDriverHost()->SetDisplayEyeToHead(id, PoseToMatrix(s_.eyeToHead[0]), PoseToMatrix(s_.eyeToHead[1]));
 
   pose_ = ToDriverPose({0, 1.6f, 0, 0, 0, 0, 1}, nullptr, nullptr, false);
+#ifdef _WIN32
   QueryPerformanceFrequency(&freq_);
   QueryPerformanceCounter(&nextVsync_);
+#endif
   LvLog("headset active: %ux%u per eye @ %.0f Hz, %u Mbps", s_.eyeWidth, s_.eyeHeight, s_.refreshHz, s_.bitrateMbps);
   return vr::VRInitError_None;
 }
 
 void* Hmd::GetComponent(const char* name) {
   if (strcmp(name, vr::IVRDisplayComponent_Version) == 0) return static_cast<vr::IVRDisplayComponent*>(this);
+#ifdef _WIN32
   if (strcmp(name, vr::IVRDriverDirectModeComponent_Version) == 0) return static_cast<vr::IVRDriverDirectModeComponent*>(this);
+#endif
   return nullptr;
 }
 
@@ -103,34 +116,38 @@ void Hmd::SetConnected(bool c) {
   }
 }
 
+uint64_t Hmd::RecordFrame(const vr::HmdMatrix34_t& m) {
+  // Which tracking sample did SteamVR render this frame with? Match the pose.
+  std::lock_guard<std::mutex> l(mutex_);
+  Hist best{};
+  float bestErr = 1e9f;
+  for (const Hist& h : hist_) {
+    if (h.ts == 0) continue;
+    vr::HmdMatrix34_t hm = PoseToMatrix(h.pose);
+    float err = 0;
+    for (int r = 0; r < 3; r++)
+      for (int c = 0; c < 4; c++) err += std::fabs(hm.m[r][c] - m.m[r][c]);
+    if (err < bestErr) {
+      bestErr = err;
+      best = h;
+    }
+  }
+  if (best.ts == 0) {  // nothing matched: use the matrix itself
+    best.pose = {m.m[0][3], m.m[1][3], m.m[2][3], 0, 0, 0, 1};
+  }
+  frames_[++frameIndex_] = best;
+  while (frames_.size() > 16) frames_.erase(frames_.begin());
+  return frameIndex_;
+}
+
+#ifdef _WIN32
 void Hmd::Present(vr::SharedTextureHandle_t sync) {
   ID3D11Texture2D* nv12 = nullptr;
   vr::HmdMatrix34_t m;
   if (!comp_->Present(sync, s_.eyeWidth, s_.eyeHeight, &nv12, &m)) return;
-  // Which tracking sample did SteamVR render this frame with? Match the pose.
-  Hist best{};
-  {
-    std::lock_guard<std::mutex> l(mutex_);
-    float bestErr = 1e9f;
-    for (const Hist& h : hist_) {
-      if (h.ts == 0) continue;
-      vr::HmdMatrix34_t hm = PoseToMatrix(h.pose);
-      float err = 0;
-      for (int r = 0; r < 3; r++)
-        for (int c = 0; c < 4; c++) err += std::fabs(hm.m[r][c] - m.m[r][c]);
-      if (err < bestErr) {
-        bestErr = err;
-        best = h;
-      }
-    }
-    if (best.ts == 0) {  // nothing matched: use the matrix itself
-      best.pose = {m.m[0][3], m.m[1][3], m.m[2][3], 0, 0, 0, 1};
-    }
-    frames_[++frameIndex_] = best;
-    while (frames_.size() > 16) frames_.erase(frames_.begin());
-  }
-  enc_->Submit(comp_->Context(), nv12, frameIndex_);
+  enc_->Submit(comp_->Context(), nv12, RecordFrame(m));
 }
+#endif
 
 bool Hmd::TakeFrameInfo(uint64_t frameIndex, uint64_t* ts, lvvr::Pose* head) {
   std::lock_guard<std::mutex> l(mutex_);
@@ -142,6 +159,7 @@ bool Hmd::TakeFrameInfo(uint64_t frameIndex, uint64_t* ts, lvvr::Pose* head) {
   return true;
 }
 
+#ifdef _WIN32
 void Hmd::PostPresent(const Throttling_t*) {
   // Simulated display vsync at the headset refresh rate.
   const LONGLONG period = LONGLONG(freq_.QuadPart / s_.refreshHz);
@@ -158,3 +176,4 @@ void Hmd::PostPresent(const Throttling_t*) {
   }
   vr::VRServerDriverHost()->VsyncEvent(0);
 }
+#endif

@@ -1,10 +1,18 @@
 # Changelog
 
+## 1.3.0
+
+- **PC VR on Linux and SteamOS**: Linux (x64) and SteamOS PCs - including the Steam Deck - can now stream SteamVR games to Meta Quest and Android XR headsets, like the Windows version. Localview installs its SteamVR driver and a compositor capture layer (based on ALVR's) automatically when you press *Play SteamVR games* on the headset. Video is encoded on the GPU with NVENC (NVIDIA) or VA-API (AMD / Intel), with x264 as a fallback; this needs `ffmpeg` on the PC.
+- **Windows VR games through Proton**: Windows-only SteamVR games run through Steam's Proton on Linux / SteamOS and stream to the headset like native ones. Non-Steam Windows VR games work when added to Steam (*Add a Non-Steam Game*) with Proton selected; plain Wine has no SteamVR bridge.
+- **Android SD cards in shared drives**: an Android device's shared storage now shows *Internal storage* plus one *SD card (ID)* folder per SD card or USB drive, so cards appear in Windows Explorer, Finder and Linux file managers. (Writing to an SD card needs Android 11 or newer with *All files access*; on Android 10 and older, cards are read-only.)
+- **Animations switch fixed**: turning animations off now also stops switch, dropdown and popup-menu, segmented-button, tab, navigation, snack-bar and tooltip animations (not just page transitions and ripples). Scrolling keeps its normal feel and loading spinners stay still.
+
 ## 1.2.0
 
 - **Two-factor authentication**: protect a device with an authenticator app (Google Authenticator, Microsoft Authenticator, Authy, 1Password, …). Set up by QR code or by typing the key, then confirm with a code. Every connection to that device — including saved/paired devices — then asks for the current code. Codes are checked by the device itself, can't be reused, and wrong codes count toward the lockout.
 - **In-app updates**: *This device → Updates* checks GitHub for a newer version and installs the right file for your platform, processor and variant (silent Windows setup, macOS disk image, Android installer, AppImage/.deb/archive on Linux and SteamOS).
 - **Older & 32-bit Android devices**: besides the all-in-one APK, every Android, Android TV and Android XR / Quest release now has per-processor APKs — ARMv7 (32-bit: older phones, most Android TVs, older headsets), ARM64 and x86-64 (Chromebooks, emulators). Android 7.0 or newer (Android 10+ for the VR build). In-app updates pick the APK for your processor.
+- **Windows on ARM**: native ARM64 builds (installer and zip) for Snapdragon / Copilot+ PCs and Surface Pro X. PC VR stays on x64 Windows (SteamVR has no ARM64 version).
 - **Fedora / RHEL / openSUSE**: Linux releases now include `.rpm` packages (x86_64 and aarch64) next to the `.deb`, AppImage and archive; in-app updates use the same package type you installed.
 - **Stable Android signing**: with a release key configured in CI, Android accepts in-app updates over the previous version.
 - **Animations switch**: *This device → Appearance → Animations* turns off page transitions, touch ripples and dialog/sheet animations.

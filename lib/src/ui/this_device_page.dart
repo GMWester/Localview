@@ -333,7 +333,7 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
               SwitchListTile(
                 secondary: const Icon(Icons.animation),
                 title: const Text('Animations'),
-                subtitle: const Text('Page transitions, touch ripples and dialog animations'),
+                subtitle: const Text('Switches, menus, dialogs, page transitions and touch ripples'),
                 value: s.animations,
                 onChanged: (v) async {
                   s.animations = v;
@@ -486,7 +486,7 @@ class _UpdatesCardState extends State<_UpdatesCard> {
                 Text(u.notes, style: tt.bodySmall, maxLines: 8, overflow: TextOverflow.ellipsis),
               ]),
             ),
-          if (busy) ...[LinearProgressIndicator(value: _progress), const SizedBox(height: 8)],
+          if (busy) ...[progressBar(_progress), const SizedBox(height: 8)],
           if (_message != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_message!, style: tt.bodySmall)),
           Wrap(spacing: 10, runSpacing: 8, children: [
             if (_restartReady)
