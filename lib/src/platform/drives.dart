@@ -7,11 +7,15 @@ import 'android.dart';
 /// Mounts a peer's storage (served on a loopback WebDAV URL) as a drive in the
 /// OS file manager.
 class DriveMounter {
+  /// Why the last mount failed (shown to the user), or null.
+  String? lastError;
+
   final Map<String, String> _mounted = {}; // key -> OS handle (drive letter / url / volume)
 
   /// Returns a human-readable location, or null if mounting isn't supported.
   Future<String?> mount(String key, String name, String url, String volume) async {
     try {
+      lastError = null;
       if (Platform.isWindows) return await _mountWindows(key, name, url);
       if (Platform.isMacOS) return await _mountMac(key, url, volume);
       if (Platform.isLinux) return await _mountLinux(key, url);
@@ -53,17 +57,29 @@ class DriveMounter {
   Future<String?> _mountWindows(String key, String name, String url) async {
     // The WebClient service backs WebDAV drive mapping; it trigger-starts on demand.
     await Process.run('sc', ['start', 'WebClient']);
-    final r = await Process.run('net', ['use', '*', url, '/persistent:no']);
-    final out = '${r.stdout}${r.stderr}';
-    final m = RegExp(r'\b([D-Z]):').firstMatch(out);
-    if (r.exitCode != 0 || m == null) {
+    final u = Uri.parse(url);
+    // http://127.0.0.1:PORT/a/b/ and its UNC form \\127.0.0.1@PORT\a\b (some setups only accept one).
+    final unc = '\\\\${u.host}@${u.port}\\${u.pathSegments.where((s) => s.isNotEmpty).join('\\')}';
+    var out = '';
+    RegExpMatch? m;
+    for (final target in [url, unc]) {
+      final r = await Process.run('net', ['use', '*', target, '/persistent:no']);
+      out = '${r.stdout}${r.stderr}'.trim();
+      m = RegExp(r'\b([D-Z]):').firstMatch(out);
+      if (r.exitCode == 0 && m != null) break;
+      m = null;
+    }
+    if (m == null) {
       debugPrint('net use failed: $out');
+      lastError = out.isEmpty ? 'Windows could not map the drive.' : out;
+      if (out.contains('67') || out.toLowerCase().contains('webclient')) {
+        lastError = '$lastError\nCheck that the "WebClient" service is installed and not disabled (services.msc).';
+      }
       return null;
     }
     final letter = '${m.group(1)}:';
     _mounted[key] = letter;
     // Give the drive a friendly label in Explorer.
-    final u = Uri.parse(url);
     final regKey = '##${u.host}@${u.port}#${u.pathSegments.where((s) => s.isNotEmpty).join('#')}';
     await Process.run('reg', [
       'add',
