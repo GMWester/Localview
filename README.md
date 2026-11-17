@@ -15,6 +15,8 @@ Every platform has its own branch, and every branch publishes into **one release
 | Android XR & Meta Quest | [`android-xr`](../../tree/android-xr) | `.apk` | | ✅ | ✅ + VR theater |
 | SteamOS: Steam Frame (arm64), Steam Deck (x64) | [`steamos`](../../tree/steamos) | AppImage | `.tar.gz` | ✅ (desktop mode) | ✅ + theater |
 
+**Not sure which file to pick?** Use the [Localview Installer](https://github.com/GMWester/LocalViewInstaller/releases/latest): choose your device, processor and LAN/WAN/Combined, and it downloads and installs the matching build.
+
 LAN and WAN builds talk to the same variant (LAN↔LAN, WAN↔WAN); **Combined** talks to all three.
 
 ## Game & video streaming (Game mode)
