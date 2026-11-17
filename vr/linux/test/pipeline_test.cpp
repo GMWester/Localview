@@ -33,7 +33,10 @@
   } while (0)
 
 static const uint32_t W = 512, H = 256;  // side-by-side, 256x256 per eye
-static const int kFrames = 45;
+// The fake compositor presents until the encoder has delivered this many frames (or 20 s pass),
+// so a slow encoder start-up on CI runners can't starve the test.
+static const int kWantFrames = 30;
+static const int kMaxFrames = 600;
 
 // Frame f: left eye colour A, right eye colour B (sRGB-encoded bytes, BGRA order).
 static void ColorsFor(int f, uint8_t a[3], uint8_t b[3]) {
@@ -42,7 +45,7 @@ static void ColorsFor(int f, uint8_t a[3], uint8_t b[3]) {
   memcpy(b, pal[(f + 2) % 5], 3);
 }
 
-static int FakeCompositor(const std::string& sock, VkFormat format) {
+static int FakeCompositor(const std::string& sock, VkFormat format, const std::string& stopFile) {
   VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
   app.apiVersion = VK_API_VERSION_1_2;
   VkInstanceCreateInfo ici{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
@@ -210,7 +213,7 @@ static int FakeCompositor(const std::string& sock, VkFormat format) {
     if (sendmsg(s, &msg, 0) < 0) return 5;
   }
   uint64_t values[3] = {0, 0, 0};
-  for (int f = 0; f < kFrames; f++) {
+  for (int f = 0; f < kMaxFrames && access(stopFile.c_str(), F_OK) != 0; f++) {
     int i = f % 3;
     uint8_t a[3], b[3];
     ColorsFor(f, a, b);
@@ -283,6 +286,8 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> stream;
     int frames = 0, keys = 0;
     std::vector<float> poses;
+    const std::string stop = dir + "/lv_test.stop";
+    unlink(stop.c_str());
     LinuxStreamer streamer;
     std::vector<float> recorded;
     bool ok = streamer.Start(
@@ -297,6 +302,10 @@ int main(int argc, char** argv) {
           stream.insert(stream.end(), d, d + n);
           frames++;
           keys += key;
+          if (frames == kWantFrames) {
+            FILE* f = fopen(stop.c_str(), "w");
+            if (f) fclose(f);
+          }
           poses.push_back(user ? recorded[user - 1] : -1.f);
           if (getenv("LV_TEST_VERBOSE")) {
             std::string nals;
@@ -310,7 +319,7 @@ int main(int argc, char** argv) {
       return 1;
     }
     pid_t pid = fork();
-    if (pid == 0) _exit(FakeCompositor(dir + "/localview-vr-ipc", format));
+    if (pid == 0) _exit(FakeCompositor(dir + "/localview-vr-ipc", format, stop));
     int status = 0;
     waitpid(pid, &status, 0);
     streamer.Stop();
@@ -328,7 +337,7 @@ int main(int argc, char** argv) {
       if (poses[i] <= poses[i - 1]) inOrder = false;
     // Frames are dropped while the encoder starts (by design: the newest frame wins), so only a
     // minimum is required; order, poses and colours are checked strictly.
-    if (WEXITSTATUS(status) != 0 || frames < 8 || keys < 1 || !inOrder) {
+    if (WEXITSTATUS(status) != 0 || frames < kWantFrames || keys < 1 || !inOrder) {
       printf("  FAIL (poses in order: %d)\n", int(inOrder));
       failures++;
       continue;

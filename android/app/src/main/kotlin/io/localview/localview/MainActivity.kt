@@ -155,6 +155,35 @@ open class MainActivity : FlutterActivity() {
                     KeepAliveService.update(this, call.argument<Boolean>("on") == true, call.argument<String>("tip") ?: "")
                     result.success(null)
                 }
+                "setRotation" -> {
+                    // portrait | landscape | auto. Apps that fix their own orientation keep it.
+                    val mode = call.argument<String>("mode") ?: "auto"
+                    if (Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(this)) {
+                        startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        result.success("permission")
+                    } else {
+                        try {
+                            val cr = contentResolver
+                            if (mode == "auto") {
+                                Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, 1)
+                            } else {
+                                Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, 0)
+                                Settings.System.putInt(cr, Settings.System.USER_ROTATION,
+                                    if (mode == "landscape") android.view.Surface.ROTATION_90 else android.view.Surface.ROTATION_0)
+                            }
+                            result.success(null)
+                        } catch (e: Exception) {
+                            result.success(e.message ?: "failed")
+                        }
+                    }
+                }
+                "grabJpeg" -> {
+                    val last = (call.argument<Number>("last") ?: -1).toLong()
+                    JpegEncoder.encodeLatest(last, call.argument<Int>("maxSide") ?: 1920, call.argument<Int>("quality") ?: 70) {
+                        result.success(it)
+                    }
+                }
                 "grab" -> {
                     val f = CaptureService.latest
                     if (f == null) result.success(null)

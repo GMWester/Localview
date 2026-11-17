@@ -11,6 +11,13 @@ class RawFrame {
   final int format; // PixelFmt
 }
 
+/// A JPEG-compressed screen image from a host that compresses natively (Android).
+class JpegFrame {
+  JpegFrame(this.seq, this.width, this.height, this.jpeg);
+  final int seq, width, height;
+  final Uint8List jpeg;
+}
+
 /// Tile-based delta encoder: only 64x64 tiles that changed since the previous
 /// frame are sent, packed as 24-bit pixels and deflate-compressed.
 class FrameEncoder {
