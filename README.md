@@ -1,6 +1,6 @@
 # Localview — Windows
 
-> **This branch:** the Windows app (`windows/`). Pushing here builds **Localview LAN**, **WAN** and **Combined** for Windows x64 and adds them, with installers, to the release of the current version (`v<version>` from pubspec.yaml). Other platforms live on their own branches (table below).
+> **This branch:** the Windows app (`windows/`), x64 and ARM64. Pushing here builds **Localview LAN**, **WAN** and **Combined** for Windows x64 and Windows on ARM and adds them, with installers, to the release of the current version (`v<version>` from pubspec.yaml). Other platforms live on their own branches (table below).
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
@@ -8,7 +8,7 @@ Every platform has its own branch, and every branch publishes into **one release
 
 | Platform | Branch | Installer | Portable | Can be controlled | Can control others |
 |---|---|---|---|---|---|
-| Windows 10/11 | [`main`](../../tree/main) | `.exe` setup (Inno Setup, optional controller driver) | `.zip` | ✅ | ✅ |
+| Windows 10/11 (x64 and ARM64) | [`main`](../../tree/main) | `.exe` setup (Inno Setup, optional controller driver) | `.zip` | ✅ | ✅ |
 | Linux x64 / arm64 | [`linux`](../../tree/linux) | `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL/openSUSE) | AppImage, `.tar.gz` | ✅ (X11 session) | ✅ |
 | macOS | [`macos`](../../tree/macos) | `.dmg` | `.zip` | ✅ | ✅ |
 | Android 7.0+ (ARMv7 32-bit, ARM64, x86-64) | [`android`](../../tree/android) | `.apk` (all-in-one or per processor) | | ✅ | ✅ |

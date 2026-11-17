@@ -10,11 +10,12 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
         mode: [lan, wan, combined]
+        arch: [x64, arm64]
         include:
           - { mode: lan, label: LAN }
           - { mode: wan, label: WAN }
@@ -26,13 +27,23 @@ jobs:
         run: |
           echo "VERSION=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
+        if: matrix.arch == 'x64'
         with:
           flutter-version: 3.50.0
           channel: stable
           cache: true
+      - name: Flutter for Windows ARM64 (built from the 3.50.0 tag; no prebuilt arm64 SDK is published)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git C:\flutter
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "C:\flutter\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          C:\flutter\bin\flutter.bat --version
       - run: flutter pub get
       - run: flutter build windows --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }}
-      - name: Build the SteamVR driver (PC VR)
+      - name: Build the SteamVR driver (PC VR, x64 only - SteamVR has no ARM64 version)
+        if: matrix.arch == 'x64'
         shell: pwsh
         run: |
           cmake -S vr/driver -B vr/build -A x64
@@ -42,10 +53,13 @@ jobs:
         shell: pwsh
         run: |
           $m = "${{ matrix.label }}"
-          $dir = "Localview-$m-windows-x64"
-          Copy-Item -Recurse build\windows\x64\runner\Release $dir
-          New-Item -ItemType Directory -Force "$dir\vr" | Out-Null
-          Copy-Item -Recurse vr\driver\localview "$dir\vr\localview"
+          $a = "${{ matrix.arch }}"
+          $dir = "Localview-$m-windows-$a"
+          Copy-Item -Recurse "build\windows\$a\runner\Release" $dir
+          if ($a -eq "x64") {
+            New-Item -ItemType Directory -Force "$dir\vr" | Out-Null
+            Copy-Item -Recurse vr\driver\localview "$dir\vr\localview"
+          }
           Rename-Item "$dir\localview.exe" "Localview $m.exe"
           Compress-Archive -Path $dir -DestinationPath "$dir.zip"
       - name: Fetch the ViGEmBus controller driver installer
@@ -59,21 +73,22 @@ jobs:
         shell: pwsh
         run: |
           $m = "${{ matrix.label }}"
+          $a = "${{ matrix.arch }}"
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (!(Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
-          $src = (Resolve-Path "Localview-$m-windows-x64").Path
-          $isargs = @("/DAppLabel=$m", "/DAppMode=${{ matrix.mode }}", "/DAppVersion=$env:VERSION", "/DSourceDir=$src", "/DOutputBase=Localview-$m-windows-x64-setup")
+          $src = (Resolve-Path "Localview-$m-windows-$a").Path
+          $isargs = @("/DAppLabel=$m", "/DAppMode=${{ matrix.mode }}", "/DAppVersion=$env:VERSION", "/DArch=$a", "/DSourceDir=$src", "/DOutputBase=Localview-$m-windows-$a-setup")
           $vig = Get-ChildItem vigem -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($vig) { $isargs += "/DVigemInstaller=$($vig.FullName)" }
           & $iscc @isargs installer\windows.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Move-Item "installer\Localview-$m-windows-x64-setup.exe" .
+          Move-Item "installer\Localview-$m-windows-$a-setup.exe" .
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-${{ matrix.mode }}
+          name: windows-${{ matrix.mode }}-${{ matrix.arch }}
           path: |
-            Localview-*-windows-x64.zip
-            Localview-*-windows-x64-setup.exe
+            Localview-*-windows-*.zip
+            Localview-*-windows-*-setup.exe
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -117,6 +132,8 @@ jobs:
             awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md | sed '/^$/d'
             echo
             cat <<'NOTES'
+            > **Easiest way to install: get the [Localview Installer](https://github.com/GMWester/LocalViewInstaller/releases/latest).** Pick your device, processor and version in the app and it downloads, installs and launches the right Localview for you — no need to find the matching file below.
+            
             One release for every platform. Pick your device, then a variant:
             
             * **Combined** (recommended): nearby devices are listed automatically and anything you connect to once is saved to *My devices*, reachable from anywhere.
@@ -126,6 +143,7 @@ jobs:
             | Device | Installer | Portable |
             |---|---|---|
             | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup.exe` | `…-windows-x64.zip` |
+            | Windows 11 on ARM (Snapdragon, Surface Pro X) | `Localview-<variant>-windows-arm64-setup.exe` | `…-windows-arm64.zip` |
             | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
             | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` (Debian/Ubuntu), `localview-<variant>-<version>-1.<arch>.rpm` (Fedora/RHEL/openSUSE) | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
             | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
