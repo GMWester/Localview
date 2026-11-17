@@ -68,6 +68,19 @@ class AndroidBridge {
       androidChannel.invokeMethod('addDrive', {'id': id, 'name': name, 'url': url});
   static Future<void> removeDrive(String id) => androidChannel.invokeMethod('removeDrive', {'id': id});
 
+  /// Switches the screen to 'portrait', 'landscape' or 'auto'. Returns 'permission' when the
+  /// user still has to allow "Modify system settings" (that screen is opened), other errors, or null.
+  static Future<String?> setRotation(String mode) =>
+      androidChannel.invokeMethod<String>('setRotation', {'mode': mode});
+
+  /// The newest screen image as JPEG, or null if it is still [lastSeq] (nothing changed).
+  static Future<JpegFrame?> grabJpeg(int lastSeq, {int maxSide = 1920, int quality = 70}) async {
+    final m = await androidChannel
+        .invokeMapMethod<String, Object?>('grabJpeg', {'last': lastSeq, 'maxSide': maxSide, 'quality': quality});
+    if (m == null) return null;
+    return JpegFrame(m['seq'] as int, m['w'] as int, m['h'] as int, m['jpeg'] as Uint8List);
+  }
+
   static Future<RawFrame?> grab() async {
     final m = await androidChannel.invokeMapMethod<String, Object?>('grab');
     if (m == null) return null;

@@ -78,6 +78,9 @@ class AppController extends ChangeNotifier {
     host = HostService(
       store,
       externalCapture: Platform.isAndroid ? AndroidBridge.grab : null,
+      externalJpeg: Platform.isAndroid
+          ? (last, maxSide, quality) => AndroidBridge.grabJpeg(last, maxSide: maxSide, quality: quality)
+          : null,
       injector: Platform.isAndroid ? AndroidInjector() : GamepadInjector(createDesktopInjector(), pads!),
     )
       ..onClipboardSet = ((t) {
@@ -88,7 +91,8 @@ class AppController extends ChangeNotifier {
         await mountDrive('host-$sid', name, url, volume);
       })
       ..onUnmount = ((sid) => unmountDrive('host-$sid'))
-      ..onAdbInfo = (Platform.isAndroid ? AndroidBridge.adbStatus : null);
+      ..onAdbInfo = (Platform.isAndroid ? AndroidBridge.adbStatus : null)
+      ..onRotate = (Platform.isAndroid ? AndroidBridge.setRotation : null);
     host
       ..rtcCapable = rtcHostSupported && await rtcUsable()
       ..padsCapable = pads != null

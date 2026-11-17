@@ -47,12 +47,18 @@ class HostSessionInfo {
 
 /// Main-isolate side of the host (the device being controlled).
 class HostService extends ChangeNotifier {
-  HostService(this.store, {this.externalCapture, this.injector});
+  HostService(this.store, {this.externalCapture, this.externalJpeg, this.injector});
 
   final AppStore store;
 
   /// Frame source living on the main isolate (Android MediaProjection).
   final Future<RawFrame?> Function()? externalCapture;
+
+  /// Hosts that compress natively (Android): newest frame as JPEG, null if unchanged since `last`.
+  final Future<JpegFrame?> Function(int last, int maxSide, int quality)? externalJpeg;
+
+  /// Viewer asked to rotate this device's screen ('portrait' | 'landscape' | 'auto'); returns an error code or null.
+  Future<String?> Function(String mode)? onRotate;
   final InputInjector? injector;
 
   Isolate? _iso;
@@ -106,7 +112,7 @@ class HostService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Map<String, Object?> _cfg() => {...hostConfigFrom(store, _publicIp), 'rtc': rtcCapable, 'pads': padsCapable, 'vr': vrCapable};
+  Map<String, Object?> _cfg() => {...hostConfigFrom(store, _publicIp), 'jpeg': externalJpeg != null, 'rotate': onRotate != null, 'rtc': rtcCapable, 'pads': padsCapable, 'vr': vrCapable};
   void _pushConfig() => _toIso?.send(['config', _cfg()]);
 
   Future<void> stop() async {
@@ -183,6 +189,23 @@ class HostService extends ChangeNotifier {
         await onUnmount?.call(m[1] as int);
       case 'clipSet':
         onClipboardSet?.call(m[1] as String);
+      case 'grabJpeg':
+        JpegFrame? j;
+        try {
+          j = await externalJpeg?.call(m[2] as int, m[3] as int, m[4] as int);
+        } catch (e) {
+          debugPrint('jpeg capture failed: $e');
+        }
+        _toIso?.send(['jpeg', m[1], if (j != null) ...[j.seq, j.width, j.height, TransferableTypedData.fromList([j.jpeg])]]);
+      case 'rotate':
+        String? err;
+        try {
+          final rotate = onRotate;
+          err = rotate == null ? 'unsupported' : await rotate(m[2] as String);
+        } catch (e) {
+          err = '$e';
+        }
+        _toIso?.send(['rotateResult', m[1], err]);
       case 'adbInfo':
         Map<String, Object?> info = const {};
         try {
@@ -227,6 +250,27 @@ class _HostIsolate {
   final Map<int, Completer<RawFrame?>> _grabs = {};
   final Map<int, Completer<String>> _clips = {};
   final Map<int, Completer<Map<String, Object?>>> _adbInfos = {};
+  final Map<int, Completer<JpegFrame?>> _jpegs = {};
+  final Map<int, Completer<String?>> _rotates = {};
+
+  Future<JpegFrame?> grabJpeg(int last, int maxSide, int quality) {
+    final id = _nextGrab++;
+    final c = Completer<JpegFrame?>();
+    _jpegs[id] = c;
+    toMain.send(['grabJpeg', id, last, maxSide, quality]);
+    return c.future.timeout(const Duration(seconds: 5), onTimeout: () {
+      _jpegs.remove(id);
+      return null;
+    });
+  }
+
+  Future<String?> rotate(String mode) {
+    final id = _nextGrab++;
+    final c = Completer<String?>();
+    _rotates[id] = c;
+    toMain.send(['rotate', id, mode]);
+    return c.future.timeout(const Duration(seconds: 10), onTimeout: () => 'timeout');
+  }
 
   Future<Map<String, Object?>> adbInfo() {
     final id = _nextGrab++;
@@ -282,6 +326,15 @@ class _HostIsolate {
         }
       case 'clip':
         _clips.remove(m[1] as int)?.complete(m[2] as String);
+      case 'jpeg':
+        final c = _jpegs.remove(m[1] as int);
+        if (c != null) {
+          c.complete(m.length < 6
+              ? null
+              : JpegFrame(m[2] as int, m[3] as int, m[4] as int, (m[5] as TransferableTypedData).materialize().asUint8List()));
+        }
+      case 'rotateResult':
+        _rotates.remove(m[1] as int)?.complete(m[2] as String?);
       case 'adbInfoResult':
         _adbInfos.remove(m[1] as int)?.complete((m[2] as Map).cast<String, Object?>());
       case 'kickAll':
@@ -424,6 +477,8 @@ class _HostIsolate {
       final viaPairKey = ticket?.viaPairKey ?? mode == 'paired';
       final session = _HostSession(this, sid, sock, ch, peerId, viaPairKey);
       session._monitorId = auth['monitor'] as String?;
+      // Native JPEG frames for viewers that understand them (1.7.0+); older ones get pixel tiles.
+      session._jpeg = cfg['jpeg'] == true && auth['jpeg'] == true;
       String? tid = mode == 'ticket' ? hello['tid'] as String : null;
       if (tid == null) {
         tid = base64UrlEncode(randomBytes(16));
@@ -442,6 +497,7 @@ class _HostIsolate {
         'pads': cfg['pads'] == true,
         'vr': cfg['vr'] == true,
         'adb': cfg['adb'] == true,
+        'rotate': cfg['rotate'] == true,
         if (cfg['publicIp'] != null) 'publicIp': cfg['publicIp'],
         'port': cfg['port'],
         if (newKey != null) 'pairKey': base64Encode(newKey),
@@ -491,6 +547,8 @@ class _HostSession {
 
   /// Monitors of this host and the one this viewer watches (each viewer chooses its own).
   List<MonitorInfo> _monitors = const [];
+  bool _jpeg = false;
+  int _jpegSeq = -1;
   String? _monitorId;
   MonitorInfo? get _monitor => pickMonitor(_monitors, _monitorId);
   DateTime _monitorsAt = DateTime(0);
@@ -546,6 +604,12 @@ class _HostSession {
             w?.complete();
           case Msg.refresh:
             encoder.reset();
+            _jpegSeq = -1;
+          case Msg.rotate:
+            final mode = jsonBody(m)['mode'] as String? ?? 'auto';
+            final err = await host.rotate(mode);
+            await sendMsg(jsonMsg(Msg.rotateResult, {'mode': mode, 'error': ?err}));
+            _jpegSeq = -1;
           case Msg.selectMonitor:
             _monitorId = jsonBody(m)['id'] as String?;
             encoder.reset();
@@ -597,9 +661,31 @@ class _HostSession {
       final minGap = 1000 ~/ fps;
       final elapsed = sw.elapsedMilliseconds;
       // Back off to ~5 fps polling when the screen is static.
-      final gap = idleFrames > 30 ? (minGap < 200 ? 200 : minGap) : minGap;
+      final gap = idleFrames > 30 && !_jpeg ? (minGap < 200 ? 200 : minGap) : minGap;
       if (elapsed < gap) await Future<void>.delayed(Duration(milliseconds: gap - elapsed));
       sw.reset();
+      if (_jpeg) {
+        // Android: the newest frame, JPEG-compressed natively; nothing is sent while the screen is still.
+        final j = await host.grabJpeg(_jpegSeq, (1920 * scale).round(), 72);
+        if (_closed) break;
+        if (j == null) {
+          idleFrames++;
+          continue;
+        }
+        idleFrames = 0;
+        _jpegSeq = j.seq;
+        if (j.width != lastW || j.height != lastH) {
+          lastW = j.width;
+          lastH = j.height;
+          await sendMsg(jsonMsg(Msg.screenInfo, {'w': j.width, 'h': j.height}));
+        }
+        _inFlight++;
+        final msg = Uint8List(j.jpeg.length + 1)
+          ..[0] = Msg.frameJpeg
+          ..setRange(1, j.jpeg.length + 1, j.jpeg);
+        await sendMsg(msg);
+        continue;
+      }
       await _refreshMonitors();
       final f = await host.grab(_monitor);
       if (_closed) break;

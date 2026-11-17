@@ -155,6 +155,39 @@ class ClientSession extends ChangeNotifier {
   String? monitorId;
   MonitorInfo? get monitor => pickMonitor(monitors, monitorId);
 
+  // JPEG frames (Android hosts): decode one at a time, always the newest.
+  Uint8List? _pendingJpeg;
+  bool _decoding = false;
+
+  void _showJpeg(Uint8List bytes) {
+    _pendingJpeg = bytes;
+    if (_decoding) return;
+    _decoding = true;
+    () async {
+      while (_pendingJpeg != null && !closed) {
+        final b = _pendingJpeg!;
+        _pendingJpeg = null;
+        try {
+          final codec = await ui.instantiateImageCodec(b);
+          final frame = await codec.getNextFrame();
+          codec.dispose();
+          final old = image.value;
+          image.value = frame.image;
+          old?.dispose();
+        } catch (e) {
+          debugPrint('jpeg frame: $e');
+        }
+      }
+      _decoding = false;
+    }();
+  }
+
+  /// Android hosts: the screen orientation last requested ('portrait' | 'landscape' | 'auto').
+  String rotation = 'auto';
+  bool peerRotate = false;
+  void Function(String? error)? onRotateResult;
+  void rotate(String mode) => send(jsonMsg(Msg.rotate, {'mode': mode}));
+
   /// Shows another monitor of the host.
   void selectMonitor(String id) {
     monitorId = id;
@@ -208,6 +241,7 @@ class ClientSession extends ChangeNotifier {
         peerPads = j['pads'] == true;
         peerVr = j['vr'] == true;
         peerAdb = j['adb'] == true;
+        peerRotate = j['rotate'] == true;
         newPairKey = j['pairKey'] as Uint8List?;
         ticketId = j['ticketId'] as String?;
         ticketKey = j['ticketKey'] as Uint8List?;
@@ -218,6 +252,13 @@ class ClientSession extends ChangeNotifier {
         notifyListeners();
       case 'reqResult':
         _reqs.remove(m[1] as int)?.complete(m[2]);
+      case 'jpeg':
+        _showJpeg((m[1] as TransferableTypedData).materialize().asUint8List());
+      case 'rotateResult':
+        final j = (m[1] as Map).cast<String, Object?>();
+        rotation = j['mode'] as String? ?? rotation;
+        onRotateResult?.call(j['error'] as String?);
+        notifyListeners();
       case 'monitors':
         final j = (m[1] as Map).cast<String, Object?>();
         monitors = [for (final x in (j['list'] as List? ?? const [])) MonitorInfo.fromJson(x as Map)];
@@ -438,6 +479,7 @@ Future<void> _clientIsolateMain(List args) async {
       'share': p['share'] == true,
       'totp': ?totpCode,
       'monitor': ?p['monitor'],
+      'jpeg': true, // understands Msg.frameJpeg
     }))));
     final wraw = await sock.next(timeout: const Duration(seconds: 20));
     Map welcome;
@@ -463,6 +505,7 @@ Future<void> _clientIsolateMain(List args) async {
         'pads': welcome['pads'] == true,
         'vr': welcome['vr'] == true,
         'adb': welcome['adb'] == true,
+        'rotate': welcome['rotate'] == true,
         if (welcome['pairKey'] != null) 'pairKey': base64Decode(welcome['pairKey'] as String),
         if (welcome['ticket'] is Map) 'ticketId': (welcome['ticket'] as Map)['id'],
         if (welcome['ticket'] is Map) 'ticketKey': base64Decode((welcome['ticket'] as Map)['key'] as String),
@@ -490,6 +533,11 @@ Future<void> _clientIsolateMain(List args) async {
           case Msg.screenInfo:
             final j = jsonBody(m);
             toMain.send(['screen', j['w'], j['h']]);
+          case Msg.frameJpeg:
+            await sendMsg(Uint8List.fromList([Msg.frameAck]));
+            toMain.send(['jpeg', TransferableTypedData.fromList([Uint8List.sublistView(m, 1)])]);
+          case Msg.rotateResult:
+            toMain.send(['rotateResult', jsonBody(m)]);
           case Msg.monitors:
             toMain.send(['monitors', jsonBody(m)]);
           case Msg.clipboard:
