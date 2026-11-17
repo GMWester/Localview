@@ -1,8 +1,17 @@
 package io.localview.localview
 
+import android.annotation.SuppressLint
+import android.annotation.TargetApi
+import android.content.AttributionSource
+import android.content.Context
+import android.content.ContextWrapper
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.net.LocalServerSocket
 import android.net.LocalSocket
 import android.os.Build
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Base64
 import android.view.InputDevice
@@ -12,6 +21,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.io.OutputStream
 import java.lang.reflect.Method
 
 /**
@@ -29,6 +39,9 @@ import java.lang.reflect.Method
  *   k keycode down        Android key code (modifiers are tracked for meta state)
  *   t base64              text through the virtual keyboard; replies "ok" or "no" (unmappable)
  *   p                     ping; replies "pong"
+ *   audio                 (Android 12+) replies "ok", then streams the device's whole sound output as
+ *                         PCM s16le stereo 48 kHz until the connection closes, or replies "no". While
+ *                         this runs the sound plays only through Localview, not the device's speaker.
  */
 object ProInputServer {
     const val SOCKET = "localview_pro_input"
@@ -46,6 +59,11 @@ object ProInputServer {
     @JvmStatic
     fun main(args: Array<String>) {
         val token = args.firstOrNull() ?: run { System.err.println("usage: ProInputServer <token>"); return }
+        // The sound capture needs a (system) context, created on a thread with a looper.
+        try {
+            Looper.prepareMainLooper()
+            ProAudio.init()
+        } catch (_: Throwable) {}
         manager = if (Build.VERSION.SDK_INT >= 34) {
             Class.forName("android.hardware.input.InputManagerGlobal").getMethod("getInstance").invoke(null)!!
         } else {
@@ -75,6 +93,7 @@ object ProInputServer {
             while (true) {
                 val line = r.readLine() ?: break
                 val p = line.split(' ')
+                if (p[0] == "audio") { ProAudio.stream(out); break }
                 synchronized(this) {
                     when (p[0]) {
                         "m" -> move(p[1].toFloat(), p[2].toFloat())
@@ -166,5 +185,70 @@ object ProInputServer {
         val events = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(t.toCharArray()) ?: return false
         for (e in events) send(e)
         return true
+    }
+}
+
+/**
+ * The device's whole sound output (REMOTE_SUBMIX), which the shell user may record. Recording it
+ * routes the sound away from the speaker, so it plays only on the controlling device - the same
+ * approach scrcpy uses for its "output" audio source.
+ */
+@SuppressLint("PrivateApi", "DiscouragedPrivateApi", "MissingPermission", "WrongConstant")
+object ProAudio {
+    private const val RATE = 48000
+    private const val SHELL = "com.android.shell"
+    private var context: Context? = null
+
+    /** Builds a context that identifies as the shell package (must run on a looper thread). */
+    fun init() {
+        if (Build.VERSION.SDK_INT < 31) return
+        val at = Class.forName("android.app.ActivityThread")
+        val thread = at.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
+        at.getDeclaredField("sCurrentActivityThread").apply { isAccessible = true }.set(null, thread)
+        at.getDeclaredField("mSystemThread").apply { isAccessible = true }.setBoolean(thread, true)
+        val sys = at.getDeclaredMethod("getSystemContext").apply { isAccessible = true }.invoke(thread) as Context
+        context = ShellContext(sys)
+    }
+
+    @TargetApi(31)
+    private class ShellContext(base: Context) : ContextWrapper(base) {
+        override fun getPackageName(): String = SHELL
+        override fun getOpPackageName(): String = SHELL
+        override fun getAttributionSource(): AttributionSource =
+            AttributionSource.Builder(2000 /* shell uid */).setPackageName(SHELL).build()
+        override fun getApplicationContext(): Context = this
+    }
+
+    @TargetApi(31)
+    private fun open(): AudioRecord? {
+        val ctx = context ?: return null
+        val fmt = AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_IN_STEREO).build()
+        val min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT)
+        val r = AudioRecord.Builder().setContext(ctx).setAudioSource(MediaRecorder.AudioSource.REMOTE_SUBMIX)
+            .setAudioFormat(fmt).setBufferSizeInBytes(maxOf(min * 8, RATE / 5 * 4)).build()
+        if (r.state != AudioRecord.STATE_INITIALIZED) { r.release(); return null }
+        r.startRecording()
+        return r
+    }
+
+    fun stream(out: OutputStream) {
+        val r = if (Build.VERSION.SDK_INT >= 31) try { open() } catch (e: Throwable) {
+            System.err.println("Localview Pro sound: ${e.message}"); null
+        } else null
+        if (r == null) { out.write("no\n".toByteArray()); return }
+        try {
+            out.write("ok\n".toByteArray())
+            val buf = ByteArray(RATE / 50 * 4) // 20 ms
+            while (true) {
+                val n = r.read(buf, 0, buf.size)
+                if (n < 0) break
+                if (n > 0) out.write(buf, 0, n)
+            }
+        } catch (_: Exception) {
+        } finally {
+            try { r.stop() } catch (_: Exception) {}
+            r.release()
+        }
     }
 }
