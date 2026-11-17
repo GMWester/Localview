@@ -38,7 +38,8 @@ dependencies:
   cryptography: ^2.9.0
   path_provider: ^2.1.6
   ffi: ^2.2.0
-
+  flutter_webrtc: ^1.6.3
+  gamepads: ^0.1.15
 dev_dependencies:
   flutter_test:
     sdk: flutter

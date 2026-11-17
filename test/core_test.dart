@@ -4,14 +4,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:localview/src/codec.dart';
 import 'package:localview/src/crypto.dart';
 import 'package:localview/src/protocol.dart';
+import 'package:localview/src/storage.dart';
+
+import 'dart:io';
 
 void main() {
   test('session keys agree and frames authenticate', () async {
     final a = await EphemeralKeys.create(), b = await EphemeralKeys.create();
     final secret = await derivePasswordKey('hunter22', [1, 2, 3]);
     final nc = randomBytes(16), nh = randomBytes(16);
-    final ka = await deriveSessionKeys(ecdh: await a.agree(b.publicKey), secret: secret, nonceClient: nc, nonceHost: nh);
-    final kb = await deriveSessionKeys(ecdh: await b.agree(a.publicKey), secret: secret, nonceClient: nc, nonceHost: nh);
+    final ka = await deriveSessionKeys(
+      ecdh: await a.agree(b.publicKey),
+      secret: secret,
+      nonceClient: nc,
+      nonceHost: nh,
+    );
+    final kb = await deriveSessionKeys(
+      ecdh: await b.agree(a.publicKey),
+      secret: secret,
+      nonceClient: nc,
+      nonceHost: nh,
+    );
     final client = SecureChannel(sendKey: ka.c2h, recvKey: ka.h2c, isClient: true);
     final host = SecureChannel(sendKey: kb.h2c, recvKey: kb.c2h, isClient: false);
     for (var i = 0; i < 3; i++) {
@@ -23,7 +36,11 @@ void main() {
     expect(() => host.open(ct), throwsA(isA<DecryptError>()));
 
     final wrong = await deriveSessionKeys(
-        ecdh: await b.agree(a.publicKey), secret: await derivePasswordKey('nope', [1, 2, 3]), nonceClient: nc, nonceHost: nh);
+      ecdh: await b.agree(a.publicKey),
+      secret: await derivePasswordKey('nope', [1, 2, 3]),
+      nonceClient: nc,
+      nonceHost: nh,
+    );
     final host2 = SecureChannel(sendKey: wrong.h2c, recvKey: wrong.c2h, isClient: false);
     final c2 = SecureChannel(sendKey: ka.c2h, recvKey: ka.h2c, isClient: true);
     expect(() async => host2.open(await c2.seal([1])), throwsA(isA<DecryptError>()));
@@ -51,5 +68,14 @@ void main() {
     final d2 = FrameDecoder()..apply(half);
     expect(d2.width, 100);
     expect(d2.height, 65);
+  });
+
+  test('password can be looked up on the device that set it', () async {
+    final dir = await Directory.systemTemp.createTemp('lvstore');
+    final a = await AppStore.load(dir: dir);
+    await a.setPassword('my secret pw');
+    final b = await AppStore.load(dir: dir);
+    expect(b.password, 'my secret pw');
+    expect(b.passwordVerifier, await derivePasswordKey('my secret pw', b.passwordSalt!));
   });
 }

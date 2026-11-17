@@ -221,6 +221,8 @@ class MacInjector implements InputInjector {
         } finally {
           calloc.free(buf);
         }
+      case PadState():
+        break; // handled by GamepadInjector
       case SpecialAction():
         break;
     }

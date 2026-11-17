@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "utils.cpp"
   "win32_window.cpp"
+  "virtual_gamepad.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"
   "runner.exe.manifest"
@@ -35,6 +36,21 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+
+# ViGEmClient (MIT) for virtual Xbox controllers. Only the source is fetched;
+# its own CMake install rules are skipped so nothing extra lands in the bundle.
+include(FetchContent)
+FetchContent_Declare(vigemclient
+  GIT_REPOSITORY https://github.com/nefarius/ViGEmClient.git
+  GIT_TAG b66d02d57e32cc8595369c53418b843e958649b4
+  SOURCE_SUBDIR do-not-add-subdirectory)
+FetchContent_MakeAvailable(vigemclient)
+add_library(lv_vigemclient STATIC "${vigemclient_SOURCE_DIR}/src/ViGEmClient.cpp")
+target_include_directories(lv_vigemclient PUBLIC "${vigemclient_SOURCE_DIR}/include"
+                                          PRIVATE "${vigemclient_SOURCE_DIR}/src")
+target_compile_definitions(lv_vigemclient PRIVATE UNICODE _UNICODE)
+target_link_libraries(lv_vigemclient PUBLIC setupapi.lib)
+target_link_libraries(${BINARY_NAME} PRIVATE lv_vigemclient)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
