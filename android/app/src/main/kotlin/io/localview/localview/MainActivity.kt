@@ -14,6 +14,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
@@ -46,6 +47,29 @@ open class MainActivity : FlutterActivity() {
     }
 
     override fun shouldDestroyEngineWithHost(): Boolean = this is ViewerActivity
+
+    /** Mounted storage volumes (internal storage, SD cards, USB drives) with their paths. */
+    private fun storageVolumes(): List<Map<String, Any?>> {
+        val sm = getSystemService(Context.STORAGE_SERVICE) as StorageManager
+        val out = mutableListOf<Map<String, Any?>>()
+        for (v in sm.storageVolumes) {
+            val state = v.state
+            if (state != Environment.MEDIA_MOUNTED && state != Environment.MEDIA_MOUNTED_READ_ONLY) continue
+            val path = if (Build.VERSION.SDK_INT >= 30) {
+                v.directory?.absolutePath
+            } else {
+                try { v.javaClass.getMethod("getPath").invoke(v) as? String } catch (_: Exception) { null }
+            } ?: continue
+            out.add(mapOf(
+                "path" to path,
+                "description" to v.getDescription(this),
+                "primary" to v.isPrimary,
+                "removable" to v.isRemovable,
+                "uuid" to v.uuid,
+            ))
+        }
+        return out
+    }
 
     override fun onResume() {
         super.onResume()
@@ -143,6 +167,7 @@ open class MainActivity : FlutterActivity() {
                     }
                 }
                 "hasAllFilesAccess" -> result.success(hasAllFilesAccess())
+                "storageVolumes" -> result.success(storageVolumes())
                 "requestAllFilesAccess" -> { requestAllFilesAccess(); result.success(null) }
                 "isTv" -> {
                     val ui = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager

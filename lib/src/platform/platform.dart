@@ -117,7 +117,7 @@ void drawArrow(RawFrame f, int cx, int cy) {
     '     X..X   ',
     '      XX    ',
   ];
-  final scale = f.width > 2500 ? 2 : 1;
+  final scale = (f.width > 2500 || f.height > 1800) ? 2 : 1;
   final px = f.pixels;
   for (var sy = 0; sy < shape.length * scale; sy++) {
     final y = cy + sy;
