@@ -333,9 +333,12 @@ class DavServer {
   final String label;
   HttpServer? _http;
   late final String token = List.generate(12, (_) => Random.secure().nextInt(36).toRadixString(36)).join();
-  late final String _labelSeg = label.replaceAll(RegExp(r'[^A-Za-z0-9 _.\-]'), '_').trim().isEmpty
-      ? 'Localview'
-      : label.replaceAll(RegExp(r'[^A-Za-z0-9 _.\-]'), '_').trim();
+  // URL-safe (no spaces: Windows' WebDAV drive mapping fails on encoded spaces); the friendly
+  // name is shown through the drive label.
+  late final String _labelSeg = () {
+    final s = label.trim().replaceAll(RegExp(r'[^A-Za-z0-9_.\-]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
+    return s.isEmpty ? 'Localview' : s;
+  }();
 
   int get port => _http!.port;
   String get prefix => '/$token/${Uri.encodeComponent(_labelSeg)}';
