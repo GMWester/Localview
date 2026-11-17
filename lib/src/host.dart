@@ -75,6 +75,7 @@ class HostService extends ChangeNotifier {
   /// Capabilities announced to controllers.
   bool rtcCapable = false;
   bool padsCapable = false;
+  bool vrCapable = false;
 
   void sendRtc(int sid, Uint8List msg) => _toIso?.send(['rtcSend', sid, msg]);
 
@@ -98,7 +99,7 @@ class HostService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Map<String, Object?> _cfg() => {...hostConfigFrom(store, _publicIp), 'rtc': rtcCapable, 'pads': padsCapable};
+  Map<String, Object?> _cfg() => {...hostConfigFrom(store, _publicIp), 'rtc': rtcCapable, 'pads': padsCapable, 'vr': vrCapable};
   void _pushConfig() => _toIso?.send(['config', _cfg()]);
 
   Future<void> stop() async {
@@ -370,6 +371,7 @@ class _HostIsolate {
         'share': cfg['share'] == true,
         'rtc': cfg['rtc'] == true,
         'pads': cfg['pads'] == true,
+        'vr': cfg['vr'] == true,
         if (cfg['publicIp'] != null) 'publicIp': cfg['publicIp'],
         'port': cfg['port'],
         if (newKey != null) 'pairKey': base64Encode(newKey),
@@ -464,7 +466,7 @@ class _HostSession {
             await sendMsg(textMsg(Msg.clipboard, t));
           case Msg.bye:
             close();
-          case final t when Msg.isRtc(t):
+          case final t when Msg.isRtc(t) || Msg.isVr(t):
             host.toMain.send(['rtc', id, m]);
           default:
             final e = InputEvent.decode(m);
