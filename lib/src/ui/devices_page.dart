@@ -6,6 +6,7 @@ import '../discovery.dart';
 import '../storage.dart';
 import 'connect.dart';
 import 'home_page.dart';
+import 'theme.dart';
 
 class DevicesPage extends StatelessWidget {
   const DevicesPage({super.key, required this.app});
@@ -88,7 +89,12 @@ class _LanDevicesState extends State<_LanDevices> {
                   title: Text(d.name),
                   subtitle: Text('${d.address} · ${d.os}${d.hasPassword ? '' : ' · no password set'}'
                       '${kIsCombined && widget.app.store.findPaired(d.id) != null ? ' · in My devices' : ''}'),
-                  trailing: Icon(kIsCombined && widget.app.store.findPaired(d.id) != null ? Icons.key : Icons.lock_outline),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (d.totp)
+                      const Tooltip(message: 'Two-factor authentication', child: Icon(Icons.verified_user_outlined)),
+                    const SizedBox(width: 8),
+                    Icon(kIsCombined && widget.app.store.findPaired(d.id) != null ? Icons.key : Icons.lock_outline),
+                  ]),
                   onTap: () => _open(d),
                 ),
               ),
@@ -109,6 +115,7 @@ class _WanDevices extends StatelessWidget {
     final addr = TextEditingController();
     final pw = TextEditingController();
     final ok = await showDialog<bool>(
+      animationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Add a device'),
@@ -197,6 +204,7 @@ class _PairedTile extends StatelessWidget {
   Future<void> _edit(BuildContext context) async {
     final c = TextEditingController(text: d.port == kDefaultTcpPort ? d.address : '${d.address}:${d.port}');
     final v = await showDialog<String>(
+      animationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Address of ${d.name}'),

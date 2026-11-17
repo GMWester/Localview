@@ -5,6 +5,8 @@ import '../client.dart';
 import '../config.dart';
 import '../storage.dart';
 import 'remote_page.dart';
+import 'two_factor.dart';
+import 'theme.dart';
 
 /// Connects, stores a new pairing if one was created, and opens the remote view.
 Future<ClientSession?> connectTo(
@@ -38,6 +40,7 @@ Future<ClientSession?> connectTo(
   final nav = Navigator.of(context);
   final messenger = ScaffoldMessenger.of(context);
   showDialog<void>(
+    animationStyle: dialogAnimation(),
     context: context,
     barrierDismissible: false,
     builder: (_) => const AlertDialog(
@@ -49,7 +52,8 @@ Future<ClientSession?> connectTo(
   try {
     session = await ClientSession.connect(params,
         onMount: (url, volume) async => app.mountDrive(key, volume, url, volume).then((_) {}),
-        onUnmount: () => app.unmountDrive(key));
+        onUnmount: () => app.unmountDrive(key),
+        askTotp: () async => context.mounted ? askTotpCode(context, paired?.name ?? host) : null);
   } catch (e) {
     err = e.toString().replaceFirst('Exception: ', '');
   }
@@ -95,6 +99,7 @@ Future<ClientSession?> connectTo(
 Future<String?> askPassword(BuildContext context, String deviceName) {
   final c = TextEditingController();
   return showDialog<String>(
+    animationStyle: dialogAnimation(),
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text('Connect to $deviceName'),

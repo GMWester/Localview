@@ -16,6 +16,7 @@ import '../stream/pcvr.dart';
 import '../stream/rtc.dart';
 import 'files_page.dart';
 import 'gamepad.dart';
+import 'theme.dart';
 
 class RemotePage extends StatefulWidget {
   const RemotePage({super.key, required this.app, required this.session});
@@ -125,6 +126,7 @@ class _RemotePageState extends State<RemotePage> {
   Future<void> _startPcvr() async {
     final st = widget.app.store;
     final mbps = await showModalBottomSheet<int>(
+      sheetAnimationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => SafeArea(
         child: ListView(shrinkWrap: true, children: [
@@ -201,6 +203,7 @@ class _RemotePageState extends State<RemotePage> {
   Future<void> _theaterOptions() async {
     final st = widget.app.store;
     await showModalBottomSheet<void>(
+      sheetAnimationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => SafeArea(
@@ -239,6 +242,7 @@ class _RemotePageState extends State<RemotePage> {
   Future<void> _gameModeOptions() async {
     final st = widget.app.store;
     final v = await showModalBottomSheet<int>(
+      sheetAnimationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => SafeArea(
         child: ListView(shrinkWrap: true, children: [
@@ -464,6 +468,7 @@ class _RemotePageState extends State<RemotePage> {
 
   Future<void> _quality() async {
     final v = await showModalBottomSheet<(double, int)>(
+      sheetAnimationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
