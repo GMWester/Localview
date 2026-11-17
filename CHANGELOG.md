@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0
+
+- **ADB over Localview** (Android phones and tablets, Android TV / Google TV, Android XR and Meta Quest): a computer connected to the device with Localview can use `adb` without a cable. Turn on *This device → ADB over Localview* on the device and *Wireless debugging* in its Developer options (Android 11+; on TVs and headsets without it, *Network debugging* / `adb tcpip` on port 5555 works too). On the computer, *⋮ → ADB (wireless debugging)…* forwards the device's adb ports to `127.0.0.1` through the end-to-end encrypted connection, pairs (enter the code shown on the device) and runs `adb connect` for you. Works over the LAN and over the internet, and keeps working while Localview runs in the background. The device only accepts these tunnels while the setting is on, and only to its own adb.
+
 ## 1.5.0
 
 - **Quit Localview**: a *Quit Localview* button at the bottom of *This device* closes the app completely, instead of keeping it in the background (asks first when that ends connections or remote access).

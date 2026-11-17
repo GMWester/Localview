@@ -168,6 +168,11 @@ open class MainActivity : FlutterActivity() {
                 }
                 "hasAllFilesAccess" -> result.success(hasAllFilesAccess())
                 "storageVolumes" -> result.success(storageVolumes())
+                "adbStatus" -> AdbInfo.status(this) { result.success(it) }
+                "openDeveloperOptions" -> {
+                    try { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) } catch (_: Exception) {}
+                    result.success(null)
+                }
                 "requestAllFilesAccess" -> { requestAllFilesAccess(); result.success(null) }
                 "isTv" -> {
                     val ui = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
