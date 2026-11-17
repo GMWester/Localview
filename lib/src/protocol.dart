@@ -7,6 +7,8 @@ abstract final class Msg {
   static const pong = 0x02;
   static const screenInfo = 0x10;
   static const frame = 0x11;
+  /// Host -> viewer: one complete JPEG screen image (hosts that compress natively, i.e. Android).
+  static const frameJpeg = 0x13;
   /// Host -> viewer: {list: [MonitorInfo json], current: id}
   static const monitors = 0x12;
   static const pointerMove = 0x20;
@@ -20,6 +22,10 @@ abstract final class Msg {
   static const refresh = 0x28;
   /// Viewer -> host: {id} (MonitorInfo.id; 'all' = whole desktop)
   static const selectMonitor = 0x29;
+  /// Viewer -> host: {mode: portrait | landscape | auto} (Android hosts)
+  static const rotate = 0x2A;
+  /// Host -> viewer: {mode, error?}
+  static const rotateResult = 0x2B;
   static const clipboard = 0x30;
   static const clipboardRequest = 0x32;
   static const bye = 0x3F;
