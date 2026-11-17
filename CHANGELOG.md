@@ -3,6 +3,7 @@
 ## 1.8.0
 
 - **Live touch when controlling Android** (Android 8+): pressing the mouse button puts the finger down immediately, it follows the pointer while you hold it and lifts on release. Previously a drag was only replayed after you let go (at the speed you dragged), which made scrolling and swiping on a phone lag by up to a couple of seconds. Holding the button is now a real long-press. Android 7 keeps the previous behaviour.
+- **Type on Android with your computer's keyboard**: everything you type goes into the field that has focus on the device, in your own keyboard layout (Shift, AltGr, accents). Text is inserted at the cursor; Backspace, Delete, Enter, Tab (next field), the arrow keys and Home / End work, Ctrl+A / C / X select, copy and cut on the device, and **Ctrl+V pastes your computer's clipboard** into it. Apps that draw their own text fields (some games, a few web pages) may not accept it.
 - **Smoother wheel scrolling on Android**: wheel notches are combined into one quick swipe instead of many slow ones that cancelled each other.
 - **Faster Android video**: while you watch, each new screen image is compressed as soon as it is captured, so it is ready the moment it is needed, and phone screens are streamed at up to 1440 pixels (the *Resolution* setting still applies).
 

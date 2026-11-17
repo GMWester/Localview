@@ -125,19 +125,59 @@ class LocalviewAccessibilityService : AccessibilityService() {
         n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, b)
     }
 
+    /** Cursor / selection in [n] as (start, end); at the end of the text when unknown. */
+    private fun selection(n: AccessibilityNodeInfo, len: Int): Pair<Int, Int> {
+        var a = n.textSelectionStart
+        var b = n.textSelectionEnd
+        if (a < 0 || b < 0 || a > len || b > len) { a = len; b = len }
+        return Pair(minOf(a, b), maxOf(a, b))
+    }
+
+    private fun select(n: AccessibilityNodeInfo, start: Int, end: Int = start) {
+        val b = Bundle()
+        b.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, start)
+        b.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, end)
+        n.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, b)
+    }
+
+    /** Replaces the selection (or inserts at the cursor) with [t] and puts the cursor after it. */
+    private fun replaceSelection(n: AccessibilityNodeInfo, t: String) {
+        val cur = currentText(n)
+        val (a, b) = selection(n, cur.length)
+        setText(n, cur.substring(0, a) + t + cur.substring(b))
+        select(n, a + t.length)
+    }
+
     fun typeText(t: String) {
         val n = focused() ?: return
-        setText(n, currentText(n) + t)
+        replaceSelection(n, t)
     }
 
     fun key(k: String) {
-        val n = focused() ?: return
+        val n = focused()
+        if (k == "tab") {
+            // Next field.
+            (n ?: rootInActiveWindow)?.focusSearch(android.view.View.FOCUS_FORWARD)?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            return
+        }
+        n ?: return
+        val cur = currentText(n)
+        val (a, b) = selection(n, cur.length)
         when (k) {
-            "backspace" -> { val c = currentText(n); if (c.isNotEmpty()) setText(n, c.dropLast(1)) }
+            "backspace" -> if (a != b) replaceSelection(n, "") else if (a > 0) { setText(n, cur.removeRange(a - 1, a)); select(n, a - 1) }
+            "delete" -> if (a != b) replaceSelection(n, "") else if (a < cur.length) { setText(n, cur.removeRange(a, a + 1)); select(n, a) }
+            "left" -> select(n, if (a != b) a else maxOf(0, a - 1))
+            "right" -> select(n, if (a != b) b else minOf(cur.length, b + 1))
+            "home", "up" -> select(n, 0)
+            "end", "down" -> select(n, cur.length)
+            "selectAll" -> select(n, 0, cur.length)
+            "copy" -> n.performAction(AccessibilityNodeInfo.ACTION_COPY)
+            "cut" -> n.performAction(AccessibilityNodeInfo.ACTION_CUT)
+            "paste" -> n.performAction(AccessibilityNodeInfo.ACTION_PASTE)
             "enter" -> if (Build.VERSION.SDK_INT >= 30) {
                 n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
             } else {
-                setText(n, currentText(n) + "\n")
+                replaceSelection(n, "\n")
             }
         }
     }

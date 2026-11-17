@@ -97,6 +97,8 @@ class AndroidInjector implements InputInjector {
   DateTime _downAt = DateTime(0);
   int? _down;
 
+  bool _ctrl = false;
+
   /// Android 8+: the finger follows the pointer live (touchDown / touchMove / touchUp).
   bool? _live;
   bool _liveDown = false;
@@ -198,11 +200,29 @@ class AndroidInjector implements InputInjector {
           _call('scroll', {'x': _x, 'y': _y, 'dx': sx, 'dy': sy});
         });
       case KeyInput(:final hid, :final down):
-        if (!down) return;
         final u = hid & 0xFFFF;
-        if (u == 0x29) _call('global', {'action': Special.back});
-        if (u == 0x2A) _call('key', {'key': 'backspace'});
-        if (u == 0x28 || u == 0x58) _call('key', {'key': 'enter'});
+        if (u == 0xE0 || u == 0xE4) _ctrl = down; // left / right Ctrl
+        if (!down) return;
+        if (_ctrl) {
+          final k = switch (u) { 0x04 => 'selectAll', 0x06 => 'copy', 0x1B => 'cut', 0x19 => 'paste', _ => null };
+          if (k != null) _call('key', {'key': k});
+          return;
+        }
+        final k = switch (u) {
+          0x2A => 'backspace',
+          0x4C => 'delete',
+          0x28 || 0x58 => 'enter',
+          0x2B => 'tab',
+          0x50 => 'left',
+          0x4F => 'right',
+          0x52 => 'up',
+          0x51 => 'down',
+          0x4A => 'home',
+          0x4D => 'end',
+          _ => null,
+        };
+        if (k != null) _call('key', {'key': k});
+        if (u == 0x29) _call('global', {'action': Special.back}); // Esc
         if (isMeta(hid)) _call('global', {'action': Special.home});
       case TextEntry(:final text):
         _call('text', {'text': text});
