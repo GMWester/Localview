@@ -41,6 +41,29 @@ object XrBridge {
     }
 
     fun handle(activity: FlutterActivity, method: String, args: Map<String, Any?>?, result: MethodChannel.Result): Boolean {
+        if (method.startsWith("vr.")) {
+            when (method) {
+                // PC VR (SteamVR streaming): native OpenXR activity.
+                "vr.available" -> result.success(true)
+                "vr.start" -> {
+                    activity.startActivity(
+                        android.content.Intent(activity, VrActivity::class.java)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    result.success(true)
+                }
+                "vr.connect" -> {
+                    VrActivity.nativeConnect(
+                        args?.get("host") as String,
+                        (args["port"] as Number).toInt(),
+                        args["key"] as String
+                    )
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+            return true
+        }
         if (!method.startsWith("xr.")) return false
         activity.lifecycleScope.launch {
             val s = ensure(activity)

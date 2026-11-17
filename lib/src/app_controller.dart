@@ -10,7 +10,9 @@ import 'host.dart';
 import 'platform/android.dart';
 import 'platform/drives.dart';
 import 'platform/gamepad_host.dart';
+import 'protocol.dart';
 import 'platform/platform.dart';
+import 'stream/pcvr.dart';
 import 'stream/rtc.dart';
 import 'storage.dart';
 import 'upnp.dart';
@@ -60,7 +62,12 @@ class AppController extends ChangeNotifier {
     host
       ..rtcCapable = rtcHostSupported && await rtcUsable()
       ..padsCapable = pads != null
+      ..vrCapable = pcvrHostSupported
       ..onRtc = ((sid, m) {
+        if (Msg.isVr(m[0])) {
+          unawaited(PcvrHost(send: (x) => host.sendRtc(sid, x), upnp: kHasWan ? upnp : null).handle(m));
+          return;
+        }
         final r = _rtc.putIfAbsent(sid, () => RtcHostSession((x) => host.sendRtc(sid, x)));
         unawaited(r.handle(m));
       })
