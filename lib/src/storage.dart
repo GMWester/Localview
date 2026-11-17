@@ -112,7 +112,7 @@ class AppStore extends ChangeNotifier {
   Uint8List? totpSecret;
   bool get totpEnabled => totpSecret != null;
 
-  /// UI animations (page transitions, ripples, dialog animations).
+  /// UI animations (switches, menus, dialogs, page transitions, ripples).
   bool animations = true;
 
   /// PC VR stream bitrate (Mbps).

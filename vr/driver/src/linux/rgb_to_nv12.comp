@@ -1,0 +1,52 @@
+#version 450
+// Localview PC VR (Linux): converts SteamVR's composited side-by-side frame into
+// NV12 (BT.709, limited range) in a host-visible buffer for the H.264 encoder.
+// One invocation handles a 4x2 pixel block: two words of Y and one word of
+// interleaved UV (U0 V0 U1 V1).
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D src;
+layout(std430, binding = 1) writeonly buffer Out { uint data[]; };
+layout(push_constant) uniform P {
+  uint width;   // output size (multiple of 16)
+  uint height;
+  uint srcWidth;
+  uint srcHeight;
+  uint srgbInput;  // 1: sampling returns linear values; re-encode to sRGB
+} pc;
+
+const vec3 kY = vec3(0.2126, 0.7152, 0.0722);
+
+vec3 toSrgb(vec3 c) {
+  c = clamp(c, 0.0, 1.0);
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
+
+vec3 fetchPx(ivec2 p) {
+  p = min(p, ivec2(pc.srcWidth - 1, pc.srcHeight - 1));
+  vec3 c = texelFetch(src, p, 0).rgb;
+  return pc.srgbInput != 0u ? toSrgb(c) : clamp(c, 0.0, 1.0);
+}
+
+uint luma(vec3 c) { return uint(clamp(round(16.0 + 219.0 * dot(c, kY)), 0.0, 255.0)); }
+
+void main() {
+  uvec2 g = gl_GlobalInvocationID.xy;
+  if (g.x * 4u >= pc.width || g.y * 2u >= pc.height) return;
+  ivec2 base = ivec2(g.x * 4u, g.y * 2u);
+  vec3 c[2][4];
+  for (int r = 0; r < 2; r++)
+    for (int i = 0; i < 4; i++) c[r][i] = fetchPx(base + ivec2(i, r));
+  for (int r = 0; r < 2; r++) {
+    uint w = luma(c[r][0]) | (luma(c[r][1]) << 8) | (luma(c[r][2]) << 16) | (luma(c[r][3]) << 24);
+    data[(uint(base.y + r) * pc.width + uint(base.x)) / 4u] = w;
+  }
+  uint uv = 0u;
+  for (int b = 0; b < 2; b++) {
+    vec3 a = (c[0][2 * b] + c[0][2 * b + 1] + c[1][2 * b] + c[1][2 * b + 1]) * 0.25;
+    float y = dot(a, kY);
+    uint u = uint(clamp(round(128.0 + 224.0 * (a.b - y) / 1.8556), 0.0, 255.0));
+    uint v = uint(clamp(round(128.0 + 224.0 * (a.r - y) / 1.5748), 0.0, 255.0));
+    uv |= (u << (16 * b)) | (v << (16 * b + 8));
+  }
+  data[(pc.width * pc.height + g.y * pc.width + uint(base.x)) / 4u] = uv;
+}

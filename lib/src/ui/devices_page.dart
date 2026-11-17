@@ -77,7 +77,7 @@ class _LanDevicesState extends State<_LanDevices> {
             if (list.isEmpty)
               Card(
                 child: ListTile(
-                  leading: const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                  leading: SizedBox(width: 24, height: 24, child: busyIndicator(strokeWidth: 2, size: 20)),
                   title: const Text('Searching…'),
                   subtitle: Text('Make sure the other device has Localview ${kIsCombined ? '(LAN or LAN + WAN)' : 'LAN'} open and is on the same router.'),
                 ),

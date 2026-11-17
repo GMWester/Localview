@@ -641,7 +641,7 @@ class _RemotePageState extends State<RemotePage> {
                 final rtc = _rtc;
                 final rtcOn = rtc != null && rtc.active && rtc.renderer.videoWidth > 0;
                 if (img == null && !rtcOn) {
-                  return const Center(child: CircularProgressIndicator());
+                  return Center(child: busyIndicator());
                 }
                 final src = rtcOn
                     ? Size(rtc.renderer.videoWidth.toDouble(), rtc.renderer.videoHeight.toDouble())
