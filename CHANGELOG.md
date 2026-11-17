@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.0
+
+- **Much lower latency when controlling an Android device** (phones, tablets, Android TV, headsets): the device now compresses its screen natively (Android's JPEG encoder) instead of sending pixel tiles compressed in Dart, so frames are a fraction of the size and ready in milliseconds; nothing is sent while the screen is still. Controlling a phone from a PC went from 0.5–2 s behind to near real time. Viewers older than 1.7.0 keep the previous format.
+- **Rotate the controlled device**: when you control an Android device, the session toolbar has a button to switch it between vertical and horizontal (and *⋮ → Device: auto-rotate* to give it back to the sensor). The first time, allow *Modify system settings* for Localview on the device (the screen opens there; you can tap it remotely). Apps that fix their own orientation keep it.
+- **The stream follows the device's orientation**: turning a phone (or rotating it remotely) now resizes the picture instead of squeezing a landscape screen into a portrait frame.
+
 ## 1.6.0
 
 - **Android updates**: from this version on, Android builds are signed with Localview's permanent release key, so in-app updates install over the previous version. Builds up to 1.5.0 used a temporary key: uninstall those once before installing 1.6.0. If an update is signed with a different key, Localview now says so instead of Android's "package conflicts" error.
