@@ -172,6 +172,8 @@ class X11Injector implements InputInjector {
                       : 0x01000000 | r;
           _typeKeysym(ks);
         }
+      case PadState():
+        break; // handled by GamepadInjector
       case SpecialAction():
         break;
     }

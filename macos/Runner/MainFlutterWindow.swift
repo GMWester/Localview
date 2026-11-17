@@ -2,6 +2,8 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
+  private var windowChannel: FlutterMethodChannel?
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -9,6 +11,22 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+
+    // "localview/window": fullscreen for Theater mode.
+    let channel = FlutterMethodChannel(
+      name: "localview/window", binaryMessenger: flutterViewController.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self = self else { return }
+      if call.method == "setFullscreen" {
+        let on = (call.arguments as? Bool) ?? false
+        let isFull = self.styleMask.contains(.fullScreen)
+        if on != isFull { self.toggleFullScreen(nil) }
+        result(nil)
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    windowChannel = channel
 
     super.awakeFromNib()
   }

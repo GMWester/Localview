@@ -91,6 +91,11 @@ class ClientSession extends ChangeNotifier {
   String peerId = '', peerName = '', peerOs = '';
   bool peerShares = false;
   String? peerPublicIp;
+  bool peerRtc = false;
+  bool peerPads = false;
+
+  /// WebRTC signaling from the host (game mode).
+  void Function(Uint8List msg)? onRtc;
   Uint8List? newPairKey;
   int screenW = 0, screenH = 0;
   final ValueNotifier<ui.Image?> image = ValueNotifier(null);
@@ -128,6 +133,8 @@ class ClientSession extends ChangeNotifier {
         peerOs = j['os'] as String? ?? '';
         peerShares = j['share'] == true;
         peerPublicIp = j['publicIp'] as String?;
+        peerRtc = j['rtc'] == true;
+        peerPads = j['pads'] == true;
         newPairKey = j['pairKey'] as Uint8List?;
         connected = true;
         status = 'Connected';
@@ -149,6 +156,8 @@ class ClientSession extends ChangeNotifier {
         });
       case 'clip':
         onClipboard?.call(m[1] as String);
+      case 'rtc':
+        onRtc?.call(m[1] as Uint8List);
       case 'mount':
         mountUrl = m[1] as String;
         mountVolume = m[2] as String;
@@ -330,6 +339,8 @@ Future<void> _clientIsolateMain(List args) async {
         'os': welcome['os'],
         'share': welcome['share'] == true,
         'publicIp': welcome['publicIp'],
+        'rtc': welcome['rtc'] == true,
+        'pads': welcome['pads'] == true,
         if (welcome['pairKey'] != null) 'pairKey': base64Decode(welcome['pairKey'] as String),
       }
     ]);
@@ -359,6 +370,8 @@ Future<void> _clientIsolateMain(List args) async {
             toMain.send(['clip', textBody(m)]);
           case Msg.bye:
             throw const SocketException('closed by peer');
+          case final t when Msg.isRtc(t):
+            toMain.send(['rtc', m]);
         }
       }
     } finally {
