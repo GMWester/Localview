@@ -9,12 +9,12 @@ Every platform has its own branch, and every branch publishes into **one release
 | Platform | Branch | Installer | Portable | Can be controlled | Can control others |
 |---|---|---|---|---|---|
 | Windows 10/11 | [`main`](../../tree/main) | `.exe` setup (Inno Setup, optional controller driver) | `.zip` | ✅ | ✅ |
-| Linux x64 / arm64 | [`linux`](../../tree/linux) | `.deb` | AppImage, `.tar.gz` | ✅ (X11 session) | ✅ |
+| Linux x64 / arm64 | [`linux`](../../tree/linux) | `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL/openSUSE) | AppImage, `.tar.gz` | ✅ (X11 session) | ✅ |
 | macOS | [`macos`](../../tree/macos) | `.dmg` | `.zip` | ✅ | ✅ |
-| Android | [`android`](../../tree/android) | `.apk` | | ✅ | ✅ |
+| Android 7.0+ (ARMv7 32-bit, ARM64, x86-64) | [`android`](../../tree/android) | `.apk` (all-in-one or per processor) | | ✅ | ✅ |
 | iOS / iPadOS | [`ios`](../../tree/ios) | `.ipa` (sideload) | | ❌ (Apple forbids input injection) | ✅ |
-| Android TV | [`android-tv`](../../tree/android-tv) | `.apk` | | ✅ | ✅ |
-| Android XR & Meta Quest | [`android-xr`](../../tree/android-xr) | `.apk` | | ✅ | ✅ + VR theater |
+| Android TV (ARMv7 — most TVs, ARM64, x86-64) | [`android-tv`](../../tree/android-tv) | `.apk` (all-in-one or per processor) | | ✅ | ✅ |
+| Android XR & Meta Quest (ARM64; ARMv7 for older 32-bit headsets) | [`android-xr`](../../tree/android-xr) | `.apk` (all-in-one or per processor) | | ✅ | ✅ + VR theater, PC VR |
 | SteamOS: Steam Frame (arm64), Steam Deck (x64) | [`steamos`](../../tree/steamos) | AppImage | `.tar.gz` | ✅ (desktop mode) | ✅ + theater |
 
 **Not sure which file to pick?** Use the [Localview Installer](https://github.com/GMWester/LocalViewInstaller/releases/latest): choose your device, processor and LAN/WAN/Combined, and it downloads and installs the matching build.
@@ -84,6 +84,14 @@ Each connection runs an ephemeral **X25519** key exchange. Session keys are deri
 
 Every message (video, input, clipboard, files) is sealed with **ChaCha20-Poly1305** using per-direction keys and counter nonces, so tampering, replay and reordering break the session. Passwords never leave the device they were set on: other devices only ever prove knowledge of them through the key exchange. The device that set a password keeps it in its owner-only settings file so you can look it up there (This device → Password → eye button) if you forget it. Five wrong passwords lock an IP out for five minutes. Ephemeral keys give forward secrecy.
 
+## Two-factor authentication
+
+*This device → Two-factor authentication → Set up*: scan the QR code with an authenticator app (or tap *Type the code manually* and enter the key), press **Next** and type the 6-digit code it shows. From then on every connection to this device — by password or with a saved pairing key — also asks for the current code (RFC 6238 TOTP, 30-second codes, ±30 s clock tolerance, each code accepted once). Turning it off requires a current code. Nearby devices with 2FA show a shield icon.
+
+## Updates
+
+*This device → Updates* (bottom of the page) checks the latest release and installs the matching build: Windows runs the setup silently and restarts Localview, Android opens the package installer, Linux replaces the AppImage / installs the .deb / unpacks the archive, macOS opens the disk image. iOS can't self-update, so it links to the release.
+
 ## Remote storage as drives
 
 While two devices are connected, each one can expose its storage to the other (toggle under **This device → Files & drives**). The storage is tunnelled through the encrypted session and served to the OS by a loopback-only WebDAV bridge (random secret path, `127.0.0.1` only):
@@ -119,7 +127,7 @@ The in-app file browser (folder button in the session toolbar) works on every pl
 
 * **Windows**: run `Localview-<variant>-windows-x64-setup.exe`. It adds Start menu/desktop shortcuts, an optional sign-in auto-start (so the PC is reachable), a firewall rule, and optionally the ViGEmBus controller driver. The `.zip` is the same app without installation.
 * **macOS**: open the `.dmg` and drag Localview to Applications.
-* **Linux**: `sudo apt install ./localview-<variant>_<version>_<arch>.deb`, or make the AppImage executable and run it.
+* **Linux**: Debian/Ubuntu `sudo apt install ./localview-<variant>_<version>_<arch>.deb`; Fedora/RHEL `sudo dnf install ./localview-<variant>-<version>-1.<arch>.rpm`; or make the AppImage executable and run it.
 * **SteamOS**: in Desktop Mode, download the AppImage for your device (arm64 for Steam Frame, x64 for Steam Deck), mark it executable, then add it to Steam as a Non-Steam Game.
 * **Android / TV / XR / Quest**: install the APK (allow installs from unknown sources; on TV use Downloader or `adb install`; on Quest use SideQuest or `adb install`).
 * **iOS**: sideload the unsigned IPA with AltStore/Sideloadly or sign it with your developer account.
