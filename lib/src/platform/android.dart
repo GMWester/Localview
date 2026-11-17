@@ -8,10 +8,34 @@ import '../codec.dart';
 import '../protocol.dart';
 import 'keymap.dart';
 import 'platform.dart';
+import '../files.dart';
 
 const MethodChannel androidChannel = MethodChannel('localview/android');
 
 class AndroidBridge {
+  /// Shared-storage root listing every mounted volume (internal storage, SD cards, USB drives)
+  /// as Android reports them; falls back to scanning /storage.
+  static Future<String> storageRoot() async {
+    try {
+      final l = await androidChannel.invokeListMethod<Map>('storageVolumes') ?? const [];
+      final out = <({String name, String path})>[];
+      for (final v in l) {
+        final path = v['path'] as String?;
+        if (path == null) continue;
+        final id = path.substring(path.lastIndexOf('/') + 1);
+        final desc = (v['description'] as String?)?.replaceAll('/', ' ').trim();
+        final name = v['primary'] == true
+            ? FsServer.internalName
+            : '${desc == null || desc.isEmpty ? (v['removable'] == true ? 'SD card' : 'Storage') : desc} ($id)';
+        if (out.any((o) => o.name == name)) continue;
+        out.add((name: name, path: path));
+      }
+      return androidVolumesRoot(out);
+    } catch (_) {
+      return kAndroidVolumesRoot;
+    }
+  }
+
   static Future<bool> startCapture() async => await androidChannel.invokeMethod<bool>('startCapture') ?? false;
   static Future<void> stopCapture() => androidChannel.invokeMethod('stopCapture');
   static Future<bool> isCapturing() async => await androidChannel.invokeMethod<bool>('isCapturing') ?? false;

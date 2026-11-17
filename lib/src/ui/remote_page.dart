@@ -288,6 +288,8 @@ class _RemotePageState extends State<RemotePage> {
     s.setStream(video: !widget.app.background.hidden.value);
   }
 
+  bool get _peerHasNoPointer => s.peerOs == 'android' || s.peerOs == 'ios';
+
   void _snack(String t) => ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(t)));
 
   String _monitorLabel(MonitorInfo m) => m.isAll ? '${m.name} · ${m.w}×${m.h}' : '${m.name}${m.primary ? ' (main)' : ''} · ${m.w}×${m.h}';
@@ -699,7 +701,9 @@ class _RemotePageState extends State<RemotePage> {
                 final fit = applyBoxFit(BoxFit.contain, src, box.biggest);
                 _imageRect = Alignment.center.inscribe(fit.destination, Offset.zero & box.biggest);
                 return MouseRegion(
-                  cursor: _virtualCursor ? SystemMouseCursors.basic : SystemMouseCursors.none,
+                  // Computers draw their pointer into the picture; phones and tablets have none,
+                  // so this device's own pointer stays visible over them.
+                  cursor: _virtualCursor || _peerHasNoPointer ? SystemMouseCursors.basic : SystemMouseCursors.none,
                   child: Listener(
                     onPointerHover: (e) => _virtualCursor ? null : _move(e.localPosition),
                     onPointerMove: (e) => e.kind == PointerDeviceKind.mouse ? _move(e.localPosition) : null,
