@@ -49,7 +49,7 @@ Each connection runs an ephemeral **X25519** key exchange. Session keys are deri
 * `PBKDF2-SHA256(password, per-device salt, 120 000 iterations)` (LAN, and the first WAN pairing), or
 * the 256-bit pairing key created when the device was added (WAN).
 
-Every message (video, input, clipboard, files) is sealed with **ChaCha20-Poly1305** using per-direction keys and counter nonces, so tampering, replay and reordering break the session. Passwords are never stored, only the salted PBKDF2 verifier. Five wrong passwords lock an IP out for five minutes. Ephemeral keys give forward secrecy.
+Every message (video, input, clipboard, files) is sealed with **ChaCha20-Poly1305** using per-direction keys and counter nonces, so tampering, replay and reordering break the session. Passwords never leave the device they were set on: other devices only ever prove knowledge of them through the key exchange. The device that set a password keeps it in its owner-only settings file so you can look it up there (This device → Password → eye button) if you forget it. Five wrong passwords lock an IP out for five minutes. Ephemeral keys give forward secrecy.
 
 ## Remote storage as drives
 
