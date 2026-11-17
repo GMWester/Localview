@@ -31,10 +31,10 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: Localview <noreply@localview.invalid>
 Depends: libgtk-3-0 | libgtk-3-0t64, libx11-6, libxtst6, libxfixes3, libpulse0
-Recommends: gvfs-backends, pulseaudio | pipewire-pulse
+Recommends: gvfs-backends, pulseaudio | pipewire-pulse, ffmpeg
 Description: Localview $LABEL - control your devices from anywhere
  Remote desktop with end-to-end encryption, game mode (hardware video,
- audio, controllers), remote drives and VR theater support.
+ audio, controllers), remote drives, VR theater and PC VR (SteamVR) streaming.
 EOD
 cat > "$ROOT/DEBIAN/postinst" <<'EOD'
 #!/bin/sh

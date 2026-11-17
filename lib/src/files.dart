@@ -50,17 +50,65 @@ class FsException implements Exception {
   String toString() => 'FsException($code)';
 }
 
+/// Root that shares every Android storage volume (internal storage, SD cards, USB drives).
+const String kAndroidVolumesRoot = 'android:volumes';
+
 /// Serves this device's storage to the peer. Virtual paths use '/' separators.
 ///
 /// [root] == null means "Windows drive mode": '/' lists drive letters and
 /// '/C/Users' maps to 'C:\Users'.
+/// [root] == [kAndroidVolumesRoot] means "Android volume mode": '/' lists
+/// "Internal storage" (/storage/emulated/0) and one "SD card (ID)" folder per
+/// SD card or USB drive (/storage/ID).
 class FsServer {
-  FsServer(this.root);
+  FsServer(this.root, {this.storageDir = '/storage'});
   final String? root;
+
+  /// Where Android mounts storage volumes (overridable for tests).
+  final String storageDir;
+
+  static const internalName = 'Internal storage';
+  static final _volumeName = RegExp(r'^SD card \(([A-Za-z0-9-]+)\)$');
+
+  bool get _volumes => root == kAndroidVolumesRoot;
+
+  /// Volume folder name -> mount point.
+  String _volumePath(String name) {
+    if (name == internalName) return '$storageDir/emulated/0';
+    final m = _volumeName.firstMatch(name);
+    if (m == null) throw FsException('not_found');
+    return '$storageDir/${m.group(1)}';
+  }
+
+  Future<List<FsEntry>> _listVolumes() async {
+    final now = DateTime.now().toUtc();
+    final out = [FsEntry(internalName, true, 0, now)];
+    try {
+      await for (final e in Directory(storageDir).list(followLinks: false)) {
+        final id = e.path.substring(e.path.lastIndexOf('/') + 1);
+        if (id == 'emulated' || id == 'self' || id.startsWith('.') || !RegExp(r'^[A-Za-z0-9-]+$').hasMatch(id)) continue;
+        try {
+          // Only volumes this app can actually open (mounted and permitted).
+          await Directory(e.path).list().first.timeout(const Duration(seconds: 2), onTimeout: () => e);
+        } on StateError {
+          // empty volume: still usable
+        } catch (_) {
+          continue;
+        }
+        out.add(FsEntry('SD card ($id)', true, 0, now));
+      }
+    } catch (_) {}
+    return out;
+  }
 
   String _real(String virt) {
     final parts = virt.split('/').where((p) => p.isNotEmpty && p != '.').toList();
     if (parts.any((p) => p == '..' || p.contains('\\') || p.contains('\x00'))) throw FsException('bad_path');
+    if (_volumes) {
+      if (parts.isEmpty) return '';
+      final base = _volumePath(parts.first);
+      return parts.length == 1 ? base : '$base/${parts.skip(1).join('/')}';
+    }
     if (root == null) {
       if (parts.isEmpty) return '';
       final drive = parts.first;
@@ -95,7 +143,7 @@ class FsServer {
       final op = req['op'] as String;
       final path = req['path'] as String? ?? '/';
       final real = _real(path);
-      final isWinRoot = root == null && real.isEmpty;
+      final isWinRoot = (root == null || _volumes) && real.isEmpty;
       switch (op) {
         case 'stat':
           if (isWinRoot) return ({'ok': true, 'e': FsEntry('', true, 0, DateTime.now().toUtc()).toJson()}, null);
@@ -103,7 +151,7 @@ class FsServer {
         case 'list':
           final List<FsEntry> entries;
           if (isWinRoot) {
-            entries = await _drives();
+            entries = _volumes ? await _listVolumes() : await _drives();
           } else {
             entries = [];
             await for (final e in Directory(real).list(followLinks: false)) {

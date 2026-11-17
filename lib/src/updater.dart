@@ -74,7 +74,11 @@ List<RegExp> assetPatternsForThisBuild() {
     ];
   }
   final p = assetPatternForThisBuild();
-  return p == null ? const [] : [p];
+  return [
+    ?p,
+    // Windows on ARM can also run the x64 build (emulated) if no ARM64 file exists.
+    if (Platform.isWindows && _arm64) RegExp('^${RegExp.escape('Localview-$_variantLabel-windows-x64-setup.exe')}\$'),
+  ];
 }
 
 /// Regex for the release file matching this build.
@@ -82,7 +86,7 @@ RegExp? assetPatternForThisBuild() {
   final l = _variantLabel;
   final arch = _arm64 ? 'arm64' : 'x64';
   String e(String s) => RegExp.escape(s);
-  if (Platform.isWindows) return RegExp('^${e('Localview-$l-windows-x64-setup.exe')}\$');
+  if (Platform.isWindows) return RegExp('^${e('Localview-$l-windows-$arch-setup.exe')}\$');
   if (Platform.isMacOS) return RegExp('^${e('Localview-$l-macos.dmg')}\$');
   if (Platform.isIOS) return RegExp('^${e('Localview-$l-ios-unsigned.ipa')}\$');
   if (Platform.isAndroid) {

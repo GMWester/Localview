@@ -21,8 +21,16 @@ UninstallDisplayIcon={app}\{#ExeName}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+#ifndef Arch
+  #define Arch "x64"
+#endif
+#if Arch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 PrivilegesRequired=admin
 CloseApplications=yes
 
