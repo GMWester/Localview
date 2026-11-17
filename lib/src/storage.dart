@@ -108,6 +108,13 @@ class AppStore extends ChangeNotifier {
   String theaterSize = 'medium';
   String theaterEnvironment = 'void';
 
+  /// Two-factor authentication: authenticator-app secret (null = off).
+  Uint8List? totpSecret;
+  bool get totpEnabled => totpSecret != null;
+
+  /// UI animations (page transitions, ripples, dialog animations).
+  bool animations = true;
+
   /// PC VR stream bitrate (Mbps).
   int vrBitrate = 150;
 
@@ -188,6 +195,9 @@ class AppStore extends ChangeNotifier {
     theaterSize = j['theaterSize'] as String? ?? 'medium';
     theaterEnvironment = j['theaterEnvironment'] as String? ?? 'void';
     vrBitrate = j['vrBitrate'] as int? ?? 150;
+    final totp = j['totpSecret'] as String?;
+    totpSecret = totp == null ? null : base64Decode(totp);
+    animations = j['animations'] as bool? ?? true;
     mountDrives = j['mountDrives'] as bool? ?? true;
     paired
       ..clear()
@@ -214,6 +224,8 @@ class AppStore extends ChangeNotifier {
         'theaterSize': theaterSize,
         'theaterEnvironment': theaterEnvironment,
         'vrBitrate': vrBitrate,
+        if (totpSecret != null) 'totpSecret': base64Encode(totpSecret!),
+        'animations': animations,
         'mountDrives': mountDrives,
         'paired': paired.map((p) => p.toJson()).toList(),
       };

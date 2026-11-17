@@ -80,6 +80,22 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     result.success(null)
                 }
+                "installApk" -> {
+                    // In-app update: hand the downloaded APK to the system installer.
+                    if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                        startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                        result.success(false)
+                    } else {
+                        val file = java.io.File(call.argument<String>("path")!!)
+                        val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.updates", file)
+                        startActivity(
+                            Intent(Intent.ACTION_VIEW)
+                                .setDataAndType(uri, "application/vnd.android.package-archive")
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                        result.success(true)
+                    }
+                }
                 "hasAllFilesAccess" -> result.success(hasAllFilesAccess())
                 "requestAllFilesAccess" -> { requestAllFilesAccess(); result.success(null) }
                 "isTv" -> {

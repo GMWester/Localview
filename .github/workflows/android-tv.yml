@@ -35,24 +35,61 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build apk --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }} -P lvMode=${{ matrix.mode }}
-      - run: cp build/app/outputs/flutter-apk/app-release.apk "Localview-${{ matrix.label }}-android-tv.apk"
+      - name: Signing key (keeps Android in-app updates installable)
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "LV_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_B64 secret: APKs are signed with a temporary key, so Android can't update over a previous build."
+          fi
+      - name: All-in-one APK (ARMv7 + ARM64 + x86-64)
+        env:
+          LV_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          flutter build apk --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }} --dart-define=LV_FLAVOR=android-tv -P lvMode=${{ matrix.mode }}
+          cp build/app/outputs/flutter-apk/app-release.apk "Localview-${{ matrix.label }}-android-tv.apk"
+      - name: Per-processor APKs (smaller downloads; ARMv7 for older/32-bit devices)
+        env:
+          LV_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          flutter build apk --release --split-per-abi --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }} --dart-define=LV_FLAVOR=android-tv -P lvMode=${{ matrix.mode }} -P force-version-code-ignoring-abi=true
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "Localview-${{ matrix.label }}-android-tv-armv7.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "Localview-${{ matrix.label }}-android-tv-arm64.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "Localview-${{ matrix.label }}-android-tv-x86_64.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android-tv-${{ matrix.mode }}
-          path: Localview-*-android-tv.apk
+          path: Localview-*-android-tv*.apk
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: pubspec.yaml
+          sparse-checkout: |
+            pubspec.yaml
+            CHANGELOG.md
           sparse-checkout-cone-mode: false
       - name: Read version from pubspec.yaml
         shell: bash
         run: |
           echo "VERSION=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
+      - name: Never add an update to an older release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SRC=$(git log -1 --format=%B | sed -n 's/^Source-Commit: *//p' | head -1)
+          [ -n "$SRC" ] || SRC=unknown
+          echo "SOURCE_COMMIT=$SRC" >> "$GITHUB_ENV"
+          BODY=$(gh release view "v$VERSION" --repo "${{ github.repository }}" --json body -q .body 2>/dev/null || true)
+          OLD=$(printf '%s' "$BODY" | sed -n 's/^Source-Commit: *//p' | head -1)
+          if [ -n "$BODY" ] && [ "$OLD" != "$SRC" ]; then
+            echo "::error::Release v$VERSION already exists for another update ($OLD). Raise 'version:' in pubspec.yaml so this update gets its own release."
+            exit 1
+          fi
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -62,6 +99,37 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete android-tv-v1.0.0 --cleanup-tag -y --repo "${{ github.repository }}" || true
+      - name: Release notes (changelog section + downloads table)
+        run: |
+          {
+            echo "## What's new in $VERSION"
+            awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md | sed '/^$/d'
+            echo
+            cat <<'NOTES'
+            One release for every platform. Pick your device, then a variant:
+            
+            * **Combined** (recommended): nearby devices are listed automatically and anything you connect to once is saved to *My devices*, reachable from anywhere.
+            * **LAN**: lists devices on the same router; connect with the password set on that device.
+            * **WAN**: add a device by IP + password; a pairing key is stored on both devices.
+            
+            | Device | Installer | Portable |
+            |---|---|---|
+            | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup.exe` | `…-windows-x64.zip` |
+            | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
+            | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` (Debian/Ubuntu), `localview-<variant>-<version>-1.<arch>.rpm` (Fedora/RHEL/openSUSE) | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
+            | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
+            | Android phones/tablets (Android 7.0+) | `Localview-<variant>-android.apk` (all processors) | per processor: `…-android-arm64.apk`, `…-android-armv7.apk` (older 32-bit devices), `…-android-x86_64.apk` |
+            | Android TV / Google TV | `Localview-<variant>-android-tv.apk` (all processors) | per processor: `…-android-tv-armv7.apk` (most TVs), `…-android-tv-arm64.apk`, `…-android-tv-x86_64.apk` |
+            | Android XR & Meta Quest | `Localview-<variant>-android-xr.apk` (all processors) | per processor: `…-android-xr-arm64.apk` (Quest 2/3/3S/Pro, Android XR), `…-android-xr-armv7.apk` (older 32-bit headsets, Android 10+), `…-android-xr-x86_64.apk` (Android XR emulator) |
+            | iOS / iPadOS (sideload) | `Localview-<variant>-ios-unsigned.ipa` | |
+            
+            Everything is end-to-end encrypted (X25519 + ChaCha20-Poly1305; game mode media is DTLS-SRTP keyed through that channel).
+            **Game mode** streams Windows/macOS/Linux PCs with hardware H.264 video, system audio and controller passthrough (up to 4K60 / 1080p120).
+          NOTES
+            echo
+            echo "Source-Commit: $SOURCE_COMMIT"
+          } > release-notes.md
+          cat release-notes.md
       - name: Publish to the shared release
         id: publish
         continue-on-error: true
@@ -73,26 +141,7 @@ jobs:
           make_latest: true
           overwrite_files: true
           files: dist/*
-          body: |
-            One release for every platform. Pick your device, then a variant:
-            
-            * **Combined** (recommended): nearby devices are listed automatically and anything you connect to once is saved to *My devices*, reachable from anywhere.
-            * **LAN**: lists devices on the same router; connect with the password set on that device.
-            * **WAN**: add a device by IP + password; a pairing key is stored on both devices.
-            
-            | Device | Installer | Portable |
-            |---|---|---|
-            | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup.exe` | `…-windows-x64.zip` |
-            | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
-            | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
-            | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
-            | Android phones/tablets | `Localview-<variant>-android.apk` | |
-            | Android TV / Google TV | `Localview-<variant>-android-tv.apk` | |
-            | Android XR & Meta Quest | `Localview-<variant>-android-xr.apk` | |
-            | iOS / iPadOS (sideload) | `Localview-<variant>-ios-unsigned.ipa` | |
-            
-            Everything is end-to-end encrypted (X25519 + ChaCha20-Poly1305; game mode media is DTLS-SRTP keyed through that channel).
-            **Game mode** streams Windows/macOS/Linux PCs with hardware H.264 video, system audio and controller passthrough (up to 4K60 / 1080p120).
+          body_path: release-notes.md
       - name: Retry (another platform may have created the release at the same moment)
         if: steps.publish.outcome == 'failure'
         run: sleep 30

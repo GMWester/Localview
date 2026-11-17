@@ -23,6 +23,9 @@ String describeError(String code) => switch (code) {
       'locked_out' => 'Too many wrong passwords. Try again in 5 minutes.',
       'version' => 'The other device runs an incompatible Localview version.',
       'wrong_device' => 'A different device answered at that address.',
+      'bad_totp' => 'Wrong authenticator code. Check that the clock on both devices is right.',
+      'totp_reused' => 'That authenticator code was already used. Wait for the next code.',
+      'totp_cancelled' => 'Connection cancelled.',
       _ => code,
     };
 
@@ -111,11 +114,17 @@ class ClientSession extends ChangeNotifier {
   int _nextFs = 1;
   final Map<int, Completer<({Map<String, dynamic> json, Uint8List data})>> _fs = {};
 
+  /// Asked when the device has two-factor authentication on; return the code or null to cancel.
+  Future<String?> Function()? askTotp;
+
   static Future<ClientSession> connect(ConnectParams p,
-      {Future<void> Function(String url, String volume)? onMount, Future<void> Function()? onUnmount}) async {
+      {Future<void> Function(String url, String volume)? onMount,
+      Future<void> Function()? onUnmount,
+      Future<String?> Function()? askTotp}) async {
     final s = ClientSession._(p)
       ..onMount = onMount
-      ..onUnmount = onUnmount;
+      ..onUnmount = onUnmount
+      ..askTotp = askTotp;
     s._rx.listen((m) => s._onMessage(m as List));
     s._iso = await Isolate.spawn(_clientIsolateMain, [s._rx.sendPort, p.toMap()], debugName: 'localview-client');
     await s._handshake.future;
@@ -130,6 +139,9 @@ class ClientSession extends ChangeNotifier {
       case 'status':
         status = m[1] as String;
         notifyListeners();
+      case 'needTotp':
+        final code = await askTotp?.call();
+        _toIso?.send(['totp', code]);
       case 'connected':
         final j = (m[1] as Map).cast<String, Object?>();
         peerId = j['id'] as String? ?? '';
@@ -253,6 +265,7 @@ Future<void> _clientIsolateMain(List args) async {
   FileLink? link;
   Future<void> chain = Future.value();
   var closing = false;
+  Completer<String?>? totpWaiter;
 
   Future<void> sendMsg(Uint8List m) => chain = chain.then((_) async {
         if (sock == null || ch == null || sock.isClosed) return;
@@ -288,6 +301,10 @@ Future<void> _clientIsolateMain(List args) async {
         } catch (e) {
           toMain.send(['fsr', id, {'ok': false, 'err': 'io'}, null]);
         }
+      case 'totp':
+        final c = totpWaiter;
+        totpWaiter = null;
+        c?.complete(m[1] as String?);
       case 'close':
         closing = true;
         await sendMsg(Uint8List.fromList([Msg.bye]));
@@ -328,7 +345,20 @@ Future<void> _clientIsolateMain(List args) async {
     final keys =
         await deriveSessionKeys(ecdh: ecdh, secret: secret, nonceClient: nonceC, nonceHost: base64Decode(ack['nonce'] as String));
     ch = SecureChannel(sendKey: keys.c2h, recvKey: keys.h2c, isClient: true);
-    await sendMsg(Uint8List.fromList(utf8.encode(jsonEncode({'t': 'auth', 'pair': p['wantPair'] == true, 'share': p['share'] == true}))));
+    String? totpCode;
+    if (ack['totp'] == true) {
+      toMain.send(['status', 'Waiting for the authenticator code…']);
+      totpWaiter = Completer<String?>();
+      toMain.send(['needTotp']);
+      totpCode = await totpWaiter!.future;
+      if (totpCode == null || totpCode.isEmpty) throw _Remote('totp_cancelled');
+    }
+    await sendMsg(Uint8List.fromList(utf8.encode(jsonEncode({
+      't': 'auth',
+      'pair': p['wantPair'] == true,
+      'share': p['share'] == true,
+      'totp': ?totpCode,
+    }))));
     final wraw = await sock.next(timeout: const Duration(seconds: 20));
     Map welcome;
     try {
