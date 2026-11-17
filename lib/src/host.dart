@@ -67,6 +67,19 @@ class HostService extends ChangeNotifier {
   }
   int? boundPort;
   void Function(String text)? onClipboardSet;
+
+  /// WebRTC signaling from a connected controller (game mode).
+  void Function(int sid, Uint8List msg)? onRtc;
+  void Function(int sid)? onSessionEnded;
+
+  /// Capabilities announced to controllers.
+  bool rtcCapable = false;
+  bool padsCapable = false;
+
+  void sendRtc(int sid, Uint8List msg) => _toIso?.send(['rtcSend', sid, msg]);
+
+  /// Stop/resume the compatibility (tile) stream while game mode video flows.
+  void pauseTiles(int sid, bool paused) => _toIso?.send(['pauseTiles', sid, paused]);
   Future<void> Function(int sid, String name, String url, String volume)? onMount;
   Future<void> Function(int sid)? onUnmount;
   Future<String?> Function()? onClipboardGet;
@@ -78,14 +91,15 @@ class HostService extends ChangeNotifier {
     _rx = rx;
     final ready = Completer<void>();
     rx.listen((m) => _onMessage(m as List, ready));
-    _iso = await Isolate.spawn(_hostIsolateMain, [rx.sendPort, hostConfigFrom(store, _publicIp), externalCapture != null],
+    _iso = await Isolate.spawn(_hostIsolateMain, [rx.sendPort, _cfg(), externalCapture != null],
         debugName: 'localview-host');
     store.addListener(_pushConfig);
     await ready.future.timeout(const Duration(seconds: 10), onTimeout: () {});
     notifyListeners();
   }
 
-  void _pushConfig() => _toIso?.send(['config', hostConfigFrom(store, _publicIp)]);
+  Map<String, Object?> _cfg() => {...hostConfigFrom(store, _publicIp), 'rtc': rtcCapable, 'pads': padsCapable};
+  void _pushConfig() => _toIso?.send(['config', _cfg()]);
 
   Future<void> stop() async {
     store.removeListener(_pushConfig);
@@ -138,7 +152,10 @@ class HostService extends ChangeNotifier {
         notifyListeners();
       case 'session-':
         sessions.remove(m[1] as int);
+        onSessionEnded?.call(m[1] as int);
         notifyListeners();
+      case 'rtc':
+        onRtc?.call(m[1] as int, m[2] as Uint8List);
       case 'paired':
         final j = (m[1] as Map).cast<String, Object?>();
         await store.upsertPaired(PairedDevice(
@@ -231,6 +248,10 @@ class _HostIsolate {
         _clips.remove(m[1] as int)?.complete(m[2] as String);
       case 'kickAll':
         _kickAll();
+      case 'rtcSend':
+        _sessions[m[1] as int]?.sendMsg(m[2] as Uint8List);
+      case 'pauseTiles':
+        _sessions[m[1] as int]?.video = !(m[2] as bool);
       case 'stop':
         _kickAll();
         _server?.close();
@@ -347,6 +368,8 @@ class _HostIsolate {
         'name': cfg['name'],
         'os': cfg['os'],
         'share': cfg['share'] == true,
+        'rtc': cfg['rtc'] == true,
+        'pads': cfg['pads'] == true,
         if (cfg['publicIp'] != null) 'publicIp': cfg['publicIp'],
         'port': cfg['port'],
         if (newKey != null) 'pairKey': base64Encode(newKey),
@@ -441,6 +464,8 @@ class _HostSession {
             await sendMsg(textMsg(Msg.clipboard, t));
           case Msg.bye:
             close();
+          case final t when Msg.isRtc(t):
+            host.toMain.send(['rtc', id, m]);
           default:
             final e = InputEvent.decode(m);
             if (e != null) host.toMain.send(['input', e.toList()]);

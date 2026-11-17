@@ -53,3 +53,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Jetpack XR SceneCore: Virtual-Desktop-style theater (Full Space + large screen).
+dependencies {
+    implementation("androidx.xr.scenecore:scenecore:1.0.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
+}

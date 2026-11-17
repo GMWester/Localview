@@ -77,10 +77,10 @@
             </intent-filter>
         </provider>
 
-        <!-- Android XR: start as a 2D panel in Home Space. -->
+        <!-- Android XR: start as a panel in Home Space; Theater mode switches to Full Space. -->
         <property
             android:name="android.window.PROPERTY_XR_ACTIVITY_START_MODE"
-            android:value="XR_ACTIVITY_START_MODE_HOME_SPACE_MANAGED" />
+            android:value="XR_ACTIVITY_START_MODE_HOME_SPACE" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

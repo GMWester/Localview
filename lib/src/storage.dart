@@ -81,6 +81,10 @@ class AppStore extends ChangeNotifier {
   Uint8List? passwordSalt;
   Uint8List? passwordVerifier;
 
+  /// The password itself, kept only on this device (owner-only file) so the
+  /// user can look it up if they forget it. Never sent to other devices.
+  String? password;
+
   int tcpPort = kDefaultTcpPort;
   bool upnpEnabled = true;
   double streamScale = 1.0;
@@ -94,6 +98,15 @@ class AppStore extends ChangeNotifier {
 
   /// Appearance: 'system', 'light', 'dark' or 'oled' (pure black for OLED screens).
   String theme = 'system';
+
+  /// Game mode (WebRTC hardware video + audio) when the host supports it.
+  bool gameMode = true;
+  int gamePreset = 1; // index into GameModeSettings.presets
+  bool showStreamStats = false;
+
+  /// VR theater (Android XR) screen size and surroundings.
+  String theaterSize = 'medium';
+  String theaterEnvironment = 'void';
 
   /// Root directory shared (null = whole filesystem / all drives on Windows).
   String? fsRoot;
@@ -159,12 +172,18 @@ class AppStore extends ChangeNotifier {
       passwordSalt = base64Decode(salt);
       passwordVerifier = base64Decode(ver);
     }
+    password = j['password'] as String?;
     tcpPort = j['tcpPort'] as int? ?? kDefaultTcpPort;
     upnpEnabled = j['upnpEnabled'] as bool? ?? true;
     streamScale = (j['streamScale'] as num?)?.toDouble() ?? 1.0;
     maxFps = j['maxFps'] as int? ?? 30;
     shareFiles = j['shareFiles'] as bool? ?? true;
     theme = j['theme'] as String? ?? 'system';
+    gameMode = j['gameMode'] as bool? ?? true;
+    gamePreset = j['gamePreset'] as int? ?? 1;
+    showStreamStats = j['showStreamStats'] as bool? ?? false;
+    theaterSize = j['theaterSize'] as String? ?? 'medium';
+    theaterEnvironment = j['theaterEnvironment'] as String? ?? 'void';
     mountDrives = j['mountDrives'] as bool? ?? true;
     paired
       ..clear()
@@ -178,12 +197,18 @@ class AppStore extends ChangeNotifier {
         'hostEnabled': hostEnabled,
         if (passwordSalt != null) 'passwordSalt': base64Encode(passwordSalt!),
         if (passwordVerifier != null) 'passwordVerifier': base64Encode(passwordVerifier!),
+        if (password != null) 'password': password,
         'tcpPort': tcpPort,
         'upnpEnabled': upnpEnabled,
         'streamScale': streamScale,
         'maxFps': maxFps,
         'shareFiles': shareFiles,
         'theme': theme,
+        'gameMode': gameMode,
+        'gamePreset': gamePreset,
+        'showStreamStats': showStreamStats,
+        'theaterSize': theaterSize,
+        'theaterEnvironment': theaterEnvironment,
         'mountDrives': mountDrives,
         'paired': paired.map((p) => p.toJson()).toList(),
       };
@@ -206,12 +231,14 @@ class AppStore extends ChangeNotifier {
     final salt = randomBytes(16);
     passwordSalt = salt;
     passwordVerifier = await derivePasswordKey(password, salt);
+    this.password = password;
     await save();
   }
 
   Future<void> clearPassword() async {
     passwordSalt = null;
     passwordVerifier = null;
+    password = null;
     await save();
   }
 
