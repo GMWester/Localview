@@ -52,7 +52,10 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
               decoration: const InputDecoration(labelText: 'New password', border: OutlineInputBorder())),
           const SizedBox(height: 12),
           TextField(controller: b, obscureText: true,
+              onSubmitted: (_) => Navigator.pop(ctx, true),
               decoration: const InputDecoration(labelText: 'Repeat password', border: OutlineInputBorder())),
+          const SizedBox(height: 8),
+          const Text('You can look it up later on this device with the eye button.', style: TextStyle(fontSize: 12)),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -72,6 +75,43 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
     }
     await app.store.setPassword(a.text);
     m.showSnackBar(const SnackBar(content: Text('Password saved.')));
+  }
+
+  Future<void> _showPassword() async {
+    final pw = app.store.password;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('This device\'s password'),
+        content: pw == null
+            ? const Text('This password was set before Localview could remember it. Use Change to set a new one.')
+            : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Type this on the other device to connect to this one.'),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(pw, style: const TextStyle(fontSize: 20, fontFamily: 'monospace', letterSpacing: 1)),
+                ),
+                const SizedBox(height: 12),
+                Text('Only visible here, on this device. It is never sent to other devices.',
+                    style: Theme.of(ctx).textTheme.bodySmall),
+              ]),
+        actions: [
+          if (pw != null)
+            TextButton.icon(
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy'),
+              onPressed: () => Clipboard.setData(ClipboardData(text: pw)),
+            ),
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
   }
 
   Future<void> _rename() async {
@@ -120,7 +160,11 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                 leading: const Icon(Icons.password),
                 title: const Text('Password'),
                 subtitle: Text(s.hasPassword ? 'Set — other devices need it to connect' : 'Not set — nobody can connect yet'),
-                trailing: FilledButton.tonal(onPressed: _setPassword, child: Text(s.hasPassword ? 'Change' : 'Set password')),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (s.hasPassword)
+                    IconButton(tooltip: 'Show password', icon: const Icon(Icons.visibility_outlined), onPressed: _showPassword),
+                  FilledButton.tonal(onPressed: _setPassword, child: Text(s.hasPassword ? 'Change' : 'Set password')),
+                ]),
               ),
               if (kCanHost)
                 SwitchListTile(
