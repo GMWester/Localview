@@ -21,6 +21,10 @@ jobs:
           - { mode: combined, label: Combined }
     steps:
       - uses: actions/checkout@v4
+      - name: Read version from pubspec.yaml
+        shell: bash
+        run: |
+          echo "VERSION=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.50.0
@@ -32,7 +36,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Localview $M" ios/Runner/Info.plist
           sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = io.localview.localview;/PRODUCT_BUNDLE_IDENTIFIER = io.localview.localview.${{ matrix.mode }};/" ios/Runner.xcodeproj/project.pbxproj
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign --dart-define=LV_MODE=${{ matrix.mode }}
+      - run: flutter build ios --release --no-codesign --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }}
       - name: Package unsigned IPA
         run: |
           M="${{ matrix.label }}"
@@ -47,6 +51,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: pubspec.yaml
+          sparse-checkout-cone-mode: false
+      - name: Read version from pubspec.yaml
+        shell: bash
+        run: |
+          echo "VERSION=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -61,9 +73,9 @@ jobs:
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
+          tag_name: v${{ env.VERSION }}
           target_commitish: main
-          name: Localview 1.0.0
+          name: Localview ${{ env.VERSION }}
           make_latest: true
           overwrite_files: true
           files: dist/*
@@ -78,7 +90,7 @@ jobs:
             |---|---|---|
             | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup.exe` | `…-windows-x64.zip` |
             | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
-            | Linux x64 / arm64 | `localview-<variant>_1.0.0_<arch>.deb` | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
+            | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
             | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
             | Android phones/tablets | `Localview-<variant>-android.apk` | |
             | Android TV / Google TV | `Localview-<variant>-android-tv.apk` | |
@@ -93,9 +105,9 @@ jobs:
       - if: steps.publish.outcome == 'failure'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
+          tag_name: v${{ env.VERSION }}
           target_commitish: main
-          name: Localview 1.0.0
+          name: Localview ${{ env.VERSION }}
           make_latest: true
           overwrite_files: true
           files: dist/*

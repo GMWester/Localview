@@ -1,10 +1,10 @@
 # Localview — iOS
 
-> **This branch:** the iOS / iPadOS app (`ios/`). Pushing here builds unsigned LAN and WAN IPAs and adds them, with installers, to the shared release `v1.0.0`. iOS works as a controller and file share; Apple does not let apps be remotely controlled.
+> **This branch:** the iOS / iPadOS app (`ios/`). Pushing here builds unsigned LAN and WAN IPAs and adds them, with installers, to the release of the current version (`v<version>` from pubspec.yaml). iOS works as a controller and file share; Apple does not let apps be remotely controlled.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
-Every platform has its own branch, and every branch publishes into **one release** ([Releases → Localview 1.0.0](../../releases/latest)) with three variants — **LAN**, **WAN** and **Combined** (LAN + WAN in one app) — each as an installer and a portable download:
+Every platform has its own branch, and every branch publishes into **one release** ([Releases → latest](../../releases/latest)) with three variants — **LAN**, **WAN** and **Combined** (LAN + WAN in one app) — each as an installer and a portable download:
 
 | Platform | Branch | Installer | Portable | Can be controlled | Can control others |
 |---|---|---|---|---|---|
@@ -16,6 +16,8 @@ Every platform has its own branch, and every branch publishes into **one release
 | Android TV | [`android-tv`](../../tree/android-tv) | `.apk` | | ✅ | ✅ |
 | Android XR & Meta Quest | [`android-xr`](../../tree/android-xr) | `.apk` | | ✅ | ✅ + VR theater |
 | SteamOS: Steam Frame (arm64), Steam Deck (x64) | [`steamos`](../../tree/steamos) | AppImage | `.tar.gz` | ✅ (desktop mode) | ✅ + theater |
+
+**Not sure which file to pick?** Use the [Localview Installer](https://github.com/GMWester/LocalViewInstaller/releases/latest): choose your device, processor and LAN/WAN/Combined, and it downloads and installs the matching build.
 
 LAN and WAN builds talk to the same variant (LAN↔LAN, WAN↔WAN); **Combined** talks to all three.
 
@@ -117,10 +119,14 @@ The in-app file browser (folder button in the session toolbar) works on every pl
 
 * **Windows**: run `Localview-<variant>-windows-x64-setup.exe`. It adds Start menu/desktop shortcuts, an optional sign-in auto-start (so the PC is reachable), a firewall rule, and optionally the ViGEmBus controller driver. The `.zip` is the same app without installation.
 * **macOS**: open the `.dmg` and drag Localview to Applications.
-* **Linux**: `sudo apt install ./localview-<variant>_1.0.0_<arch>.deb`, or make the AppImage executable and run it.
+* **Linux**: `sudo apt install ./localview-<variant>_<version>_<arch>.deb`, or make the AppImage executable and run it.
 * **SteamOS**: in Desktop Mode, download the AppImage for your device (arm64 for Steam Frame, x64 for Steam Deck), mark it executable, then add it to Steam as a Non-Steam Game.
 * **Android / TV / XR / Quest**: install the APK (allow installs from unknown sources; on TV use Downloader or `adb install`; on Quest use SideQuest or `adb install`).
 * **iOS**: sideload the unsigned IPA with AltStore/Sideloadly or sign it with your developer account.
+
+## Versions
+
+The version lives in one place, `version:` in `pubspec.yaml`. Every platform build reads it, shows it in the app and publishes to the release `v<version>`; see [CHANGELOG.md](CHANGELOG.md).
 
 ## Building from source
 
