@@ -112,7 +112,12 @@ class HostService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Map<String, Object?> _cfg() => {...hostConfigFrom(store, _publicIp), 'jpeg': externalJpeg != null, 'rotate': onRotate != null, 'rtc': rtcCapable, 'pads': padsCapable, 'vr': vrCapable};
+  /// This computer can silence its speakers while the sound plays on a viewer.
+  bool audioRouteCapable = false;
+  /// The sound is sent as PCM over the session (Android hosts) instead of WebRTC.
+  bool pcmAudioCapable = false;
+
+  Map<String, Object?> _cfg() => {...hostConfigFrom(store, _publicIp), 'jpeg': externalJpeg != null, 'rotate': onRotate != null, 'audioRoute': audioRouteCapable, 'pcmAudio': pcmAudioCapable, 'rtc': rtcCapable, 'pads': padsCapable, 'vr': vrCapable};
   void _pushConfig() => _toIso?.send(['config', _cfg()]);
 
   Future<void> stop() async {
@@ -498,6 +503,8 @@ class _HostIsolate {
         'vr': cfg['vr'] == true,
         'adb': cfg['adb'] == true,
         'rotate': cfg['rotate'] == true,
+        'audioRoute': cfg['audioRoute'] == true && (cfg['rtc'] == true || cfg['pcmAudio'] == true),
+        'pcmAudio': cfg['pcmAudio'] == true,
         if (cfg['publicIp'] != null) 'publicIp': cfg['publicIp'],
         'port': cfg['port'],
         if (newKey != null) 'pairKey': base64Encode(newKey),

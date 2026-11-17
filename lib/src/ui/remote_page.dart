@@ -13,6 +13,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../platform/theater.dart';
 import '../stream/pcvr.dart';
+import '../stream/pcm_audio.dart';
 import '../stream/rtc.dart';
 import 'files_page.dart';
 import 'gamepad.dart';
@@ -47,6 +48,11 @@ class _RemotePageState extends State<RemotePage> {
 
   // Game mode (WebRTC) + controllers + theater.
   RtcClient? _rtc;
+
+  /// Sound plays only on this device (true) or only on the controlled device (false).
+  bool _soundHere = false;
+  RtcClient? _sound; // audio-only stream while game mode is off
+  PcmPlayer? _pcm; // sound of an Android host
   PadForwarder? _pads;
   bool _touchPad = false;
   bool _theater = false;
@@ -63,6 +69,13 @@ class _RemotePageState extends State<RemotePage> {
     _virtualCursor = widget.app.isTv;
     s.addListener(_onSession);
     widget.app.background.hidden.addListener(_onWindowHidden);
+    s.onAudioRoute = (mode, err) {
+      if (err != null && mounted) {
+        _snack(mode == 'viewer'
+            ? "Couldn't silence ${s.peerName}'s speakers ($err), so the sound plays on both devices."
+            : "Couldn't turn ${s.peerName}'s speakers back on: $err");
+      }
+    };
     s.onRotateResult = (err) {
       if (err == null || !mounted) return;
       _snack(err == 'permission'
@@ -123,6 +136,13 @@ class _RemotePageState extends State<RemotePage> {
       }
       setState(() {});
     });
+    // Game mode brings the sound to this device (only here, when the host can silence its speakers).
+    await _stopSound();
+    r.setAudioEnabled(true);
+    if (s.peerAudioRoute && !_soundHere) {
+      _soundHere = true;
+      s.setAudioRoute('viewer');
+    }
     await r.start(_preset.onMonitor(s.monitor?.osIndex));
     // Fall back if nothing arrives (e.g. UDP blocked between the networks).
     Future.delayed(const Duration(seconds: 15), () {
@@ -192,7 +212,56 @@ class _RemotePageState extends State<RemotePage> {
     s.onRtc = null;
     s.setStream(video: true);
     await r?.dispose();
+    if (_soundHere && mounted) await _startSound(); // keep the sound here
     if (mounted) setState(() {});
+  }
+
+  Future<void> _startSound() async {
+    if (s.peerPcmAudio) {
+      if (_pcm != null) return;
+      final p = PcmPlayer();
+      final err = p.start();
+      if (err != null) {
+        _snack(err);
+        return;
+      }
+      _pcm = p;
+      s.onAudioPcm = p.push;
+      return;
+    }
+    if (_sound != null || _rtc != null || !s.peerRtc || !await rtcUsable()) return;
+    final a = RtcClient(s.send);
+    _sound = a;
+    s.onRtc = (m) => a.handle(m);
+    await a.start(const GameModeSettings(video: false, fps: 30, bitrateKbps: 1000));
+  }
+
+  Future<void> _stopSound() async {
+    s.onAudioPcm = null;
+    _pcm?.stop();
+    _pcm = null;
+    final a = _sound;
+    _sound = null;
+    if (a == null) return;
+    if (s.onRtc != null && _rtc == null) s.onRtc = null;
+    await a.dispose();
+  }
+
+  /// Switches where the sound plays: only on this device, or only on the controlled device.
+  Future<void> _setSoundHere(bool here) async {
+    setState(() => _soundHere = here);
+    if (here) {
+      if (_rtc != null) {
+        _rtc!.setAudioEnabled(true);
+      } else {
+        await _startSound();
+      }
+      s.setAudioRoute('viewer');
+    } else {
+      s.setAudioRoute('host');
+      _rtc?.setAudioEnabled(false);
+      await _stopSound();
+    }
   }
 
   Future<void> _setTheater(bool on) async {
@@ -334,6 +403,11 @@ class _RemotePageState extends State<RemotePage> {
     final r = _rtc;
     _rtc = null;
     r?.dispose();
+    final snd = _sound;
+    _sound = null;
+    snd?.dispose();
+    _pcm?.stop();
+    _pcm = null;
     if (_theater) Theater.exit();
     if (!s.closed) s.close();
     _focus.dispose();
@@ -581,6 +655,14 @@ class _RemotePageState extends State<RemotePage> {
                   IconButton(tooltip: 'Home', icon: const Icon(Icons.circle_outlined), onPressed: () => s.send(specialMsg(Special.home))),
                   IconButton(tooltip: 'Recents', icon: const Icon(Icons.crop_square), onPressed: () => s.send(specialMsg(Special.recents))),
                 ],
+                if (s.peerAudioRoute)
+                  IconButton(
+                    tooltip: _soundHere
+                        ? 'Sound plays only on this device (switch to ${s.peerName})'
+                        : 'Sound plays only on ${s.peerName} (switch to this device)',
+                    icon: Icon(_soundHere ? Icons.headphones : Icons.speaker),
+                    onPressed: () => _setSoundHere(!_soundHere),
+                  ),
                 if (s.peerRotate)
                   IconButton(
                     tooltip: s.screenW > s.screenH ? 'Switch the device to vertical' : 'Switch the device to horizontal',
