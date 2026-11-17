@@ -88,6 +88,8 @@ class AndroidInjector implements InputInjector {
         if (isMeta(hid)) _call('global', {'action': Special.home});
       case TextEntry(:final text):
         _call('text', {'text': text});
+      case PadState():
+        break; // handled by GamepadInjector
       case SpecialAction(:final action):
         _call('global', {'action': action});
     }

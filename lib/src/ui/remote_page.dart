@@ -9,7 +9,12 @@ import 'package:material_ui/material_ui.dart';
 import '../app_controller.dart';
 import '../client.dart';
 import '../protocol.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+
+import '../platform/theater.dart';
+import '../stream/rtc.dart';
 import 'files_page.dart';
+import 'gamepad.dart';
 
 class RemotePage extends StatefulWidget {
   const RemotePage({super.key, required this.app, required this.session});
@@ -35,6 +40,13 @@ class _RemotePageState extends State<RemotePage> {
   Offset? _lastFocal;
   double _scrollAcc = 0;
 
+  // Game mode (WebRTC) + controllers + theater.
+  RtcClient? _rtc;
+  PadForwarder? _pads;
+  bool _touchPad = false;
+  bool _theater = false;
+  bool _xr = false;
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +57,150 @@ class _RemotePageState extends State<RemotePage> {
       _snack('Remote clipboard copied to this device.');
     };
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+    if (s.peerPads) {
+      _pads = PadForwarder(s.send)..start();
+    }
+    if (s.peerRtc && widget.app.store.gameMode) {
+      rtcUsable().then((ok) {
+        if (ok && mounted) _startGameMode();
+      });
+    }
+    Theater.xrAvailable().then((v) {
+      if (!mounted || !v) return;
+      setState(() => _xr = true);
+      _setTheater(true); // headsets open straight into the big screen
+    });
+  }
+
+  GameModeSettings get _preset {
+    final p = GameModeSettings.presets;
+    return p[widget.app.store.gamePreset.clamp(0, p.length - 1)].$2;
+  }
+
+  Future<void> _startGameMode() async {
+    if (!await rtcUsable()) {
+      _snack('Game mode needs a working sound system (PulseAudio/PipeWire) on this device.');
+      return;
+    }
+    final r = RtcClient(s.send);
+    _rtc = r;
+    s.onRtc = (m) => r.handle(m);
+    var wasActive = false;
+    r.addListener(() {
+      if (!mounted) return;
+      if (r.active && !wasActive) {
+        wasActive = true;
+        s.setStream(video: false); // hardware stream is up: stop the compatibility stream
+      }
+      if (r.error != null) {
+        final e = r.error!;
+        r.error = null;
+        wasActive = false;
+        s.setStream(video: true);
+        _snack(e);
+      }
+      setState(() {});
+    });
+    await r.start(_preset);
+    // Fall back if nothing arrives (e.g. UDP blocked between the networks).
+    Future.delayed(const Duration(seconds: 15), () {
+      if (mounted && _rtc == r && !r.active) {
+        r.error = 'Game mode could not connect (UDP blocked?). Using compatibility mode.';
+        r.stop();
+      }
+    });
+  }
+
+  Future<void> _stopGameMode() async {
+    final r = _rtc;
+    _rtc = null;
+    s.onRtc = null;
+    s.setStream(video: true);
+    await r?.dispose();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setTheater(bool on) async {
+    setState(() {
+      _theater = on;
+      _toolbar = !on;
+    });
+    final st = widget.app.store;
+    final w = _rtc?.active == true ? _rtc!.renderer.videoWidth : s.image.value?.width ?? 16;
+    final h = _rtc?.active == true ? _rtc!.renderer.videoHeight : s.image.value?.height ?? 9;
+    if (on) {
+      await Theater.enter(size: st.theaterSize, environment: st.theaterEnvironment, aspect: h > 0 ? w / h : 16 / 9);
+    } else {
+      await Theater.exit();
+    }
+  }
+
+  Future<void> _theaterOptions() async {
+    final st = widget.app.store;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => SafeArea(
+          child: ListView(shrinkWrap: true, children: [
+            const ListTile(title: Text('Screen size')),
+            for (final e in theaterSizes.entries)
+              ListTile(
+                leading: Icon(st.theaterSize == e.key ? Icons.radio_button_checked : Icons.radio_button_off),
+                title: Text(e.value.$1),
+                onTap: () async {
+                  st.theaterSize = e.key;
+                  await st.save();
+                  set(() {});
+                  if (_theater) await _setTheater(true);
+                },
+              ),
+            const Divider(),
+            const ListTile(title: Text('Surroundings')),
+            for (final e in theaterEnvironments.entries)
+              ListTile(
+                leading: Icon(st.theaterEnvironment == e.key ? Icons.radio_button_checked : Icons.radio_button_off),
+                title: Text(e.value),
+                onTap: () async {
+                  st.theaterEnvironment = e.key;
+                  await st.save();
+                  set(() {});
+                  await Theater.setEnvironment(e.key);
+                },
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _gameModeOptions() async {
+    final st = widget.app.store;
+    final v = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          ListTile(
+            title: const Text('Game mode quality'),
+            subtitle: Text(s.peerRtc
+                ? 'Hardware video (H.264) with sound, low latency. Higher settings need a fast network (5 GHz Wi-Fi or Ethernet).'
+                : 'This host does not support game mode.'),
+          ),
+          for (var i = 0; i < GameModeSettings.presets.length; i++)
+            ListTile(
+              leading: Icon(st.gamePreset == i ? Icons.radio_button_checked : Icons.radio_button_off),
+              title: Text(GameModeSettings.presets[i].$1),
+              onTap: () => Navigator.pop(ctx, i),
+            ),
+        ]),
+      ),
+    );
+    if (v == null) return;
+    st.gamePreset = v;
+    await st.save();
+    if (s.peerRtc) {
+      await _stopGameMode();
+      await _startGameMode();
+    }
   }
 
   void _onSession() {
@@ -61,6 +217,11 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void dispose() {
     s.removeListener(_onSession);
+    _pads?.dispose();
+    final r = _rtc;
+    _rtc = null;
+    r?.dispose();
+    if (_theater) Theater.exit();
     if (!s.closed) s.close();
     _focus.dispose();
     _typeFocus.dispose();
@@ -183,6 +344,8 @@ class _RemotePageState extends State<RemotePage> {
       if (k == LogicalKeyboardKey.arrowRight && isDown) { _nudge(Offset(step(), 0)); return KeyEventResult.handled; }
       if (k == LogicalKeyboardKey.arrowUp && isDown) { _nudge(Offset(0, -step())); return KeyEventResult.handled; }
       if (k == LogicalKeyboardKey.arrowDown && isDown) { _nudge(Offset(0, step())); return KeyEventResult.handled; }
+      final padKey = _pads != null && (k == LogicalKeyboardKey.gameButtonA || k == LogicalKeyboardKey.gameButtonB || k == LogicalKeyboardKey.gameButtonX);
+      if (padKey) return KeyEventResult.handled; // forwarded as a controller instead
       if (k == LogicalKeyboardKey.select || k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.gameButtonA) {
         if (e is KeyDownEvent) _btn(Btn.left, true);
         if (e is KeyUpEvent) _btn(Btn.left, false);
@@ -197,8 +360,13 @@ class _RemotePageState extends State<RemotePage> {
         return KeyEventResult.handled;
       }
     }
+    if (_theater && e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.f11) {
+      _setTheater(false);
+      return KeyEventResult.handled;
+    }
     final hid = e.physicalKey.usbHidUsage;
     if (hid == 0) return KeyEventResult.ignored;
+    if (_pads != null && (hid >> 16) == 0x05) return KeyEventResult.handled; // gamepad page: sent as controller
     if (e is KeyDownEvent || e is KeyRepeatEvent) {
       s.send(keyMsg(hid, true));
     } else if (e is KeyUpEvent) {
@@ -284,6 +452,27 @@ class _RemotePageState extends State<RemotePage> {
                     icon: const Icon(Icons.folder_open),
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => FilesPage(session: s))),
                   ),
+                if (s.peerRtc)
+                  IconButton(
+                    tooltip: _rtc?.active == true ? 'Game mode on (tap for quality)' : 'Game mode',
+                    isSelected: _rtc?.active == true,
+                    icon: const Icon(Icons.sports_esports_outlined),
+                    selectedIcon: const Icon(Icons.sports_esports),
+                    onPressed: _gameModeOptions,
+                  ),
+                if (touchDevice && _pads != null)
+                  IconButton(
+                    tooltip: 'On-screen controller',
+                    isSelected: _touchPad,
+                    icon: const Icon(Icons.gamepad_outlined),
+                    selectedIcon: const Icon(Icons.gamepad),
+                    onPressed: () => setState(() => _touchPad = !_touchPad),
+                  ),
+                IconButton(
+                  tooltip: _xr ? 'VR theater' : 'Theater mode (fullscreen)',
+                  icon: Icon(_xr ? Icons.vrpano_outlined : Icons.fullscreen),
+                  onPressed: () => _setTheater(!_theater),
+                ),
                 PopupMenuButton<String>(
                   onSelected: (v) async {
                     switch (v) {
@@ -304,6 +493,18 @@ class _RemotePageState extends State<RemotePage> {
                         _combo([0x29]);
                       case 'refresh':
                         s.send(Uint8List.fromList([Msg.refresh]));
+                      case 'stats':
+                        widget.app.store.showStreamStats = !widget.app.store.showStreamStats;
+                        await widget.app.store.save();
+                        setState(() {});
+                      case 'theaterOpts':
+                        await _theaterOptions();
+                      case 'gameOff':
+                        if (_rtc != null) {
+                          await _stopGameMode();
+                        } else {
+                          await _startGameMode();
+                        }
                       case 'hide':
                         setState(() => _toolbar = false);
                     }
@@ -318,6 +519,10 @@ class _RemotePageState extends State<RemotePage> {
                     const PopupMenuItem(value: 'taskmgr', child: Text('Ctrl + Shift + Esc')),
                     const PopupMenuItem(value: 'esc', child: Text('Esc')),
                     const PopupMenuItem(value: 'refresh', child: Text('Refresh screen')),
+                    if (s.peerRtc)
+                      PopupMenuItem(value: 'gameOff', child: Text(_rtc != null ? 'Switch to compatibility mode' : 'Switch to game mode')),
+                    CheckedPopupMenuItem(value: 'stats', checked: widget.app.store.showStreamStats, child: const Text('Show stream stats')),
+                    const PopupMenuItem(value: 'theaterOpts', child: Text('Theater size & surroundings…')),
                     const PopupMenuItem(value: 'hide', child: Text('Hide toolbar (Back / B to show)')),
                   ],
                 ),
@@ -355,10 +560,15 @@ class _RemotePageState extends State<RemotePage> {
             return ValueListenableBuilder<ui.Image?>(
               valueListenable: s.image,
               builder: (context, img, _) {
-                if (img == null) {
+                final rtc = _rtc;
+                final rtcOn = rtc != null && rtc.active && rtc.renderer.videoWidth > 0;
+                if (img == null && !rtcOn) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final fit = applyBoxFit(BoxFit.contain, Size(img.width.toDouble(), img.height.toDouble()), box.biggest);
+                final src = rtcOn
+                    ? Size(rtc.renderer.videoWidth.toDouble(), rtc.renderer.videoHeight.toDouble())
+                    : Size(img!.width.toDouble(), img.height.toDouble());
+                final fit = applyBoxFit(BoxFit.contain, src, box.biggest);
                 _imageRect = Alignment.center.inscribe(fit.destination, Offset.zero & box.biggest);
                 return MouseRegion(
                   cursor: _virtualCursor ? SystemMouseCursors.basic : SystemMouseCursors.none,
@@ -376,7 +586,11 @@ class _RemotePageState extends State<RemotePage> {
                       onScaleUpdate: _onScaleUpdate,
                       onScaleEnd: _onScaleEnd,
                       child: Stack(children: [
-                        Positioned.fill(child: RawImage(image: img, fit: BoxFit.contain, filterQuality: FilterQuality.medium)),
+                        Positioned.fill(
+                          child: rtcOn
+                              ? RTCVideoView(rtc.renderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain)
+                              : RawImage(image: img, fit: BoxFit.contain, filterQuality: FilterQuality.medium),
+                        ),
                         if (_virtualCursor)
                           Positioned(
                             left: _imageRect.left + _vc.dx * _imageRect.width - 2,
@@ -391,6 +605,22 @@ class _RemotePageState extends State<RemotePage> {
             );
           }),
         ),
+        if (_touchPad && _pads != null) Positioned.fill(child: TouchGamepad(forwarder: _pads!)),
+        if (widget.app.store.showStreamStats)
+          Positioned(
+            left: 8,
+            bottom: 8,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
+                child: Text(
+                  _rtc?.active == true ? 'Game mode · ${_rtc!.stats}' : 'Compatibility mode',
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+          ),
         if (!_toolbar)
           Positioned(
             right: 8,

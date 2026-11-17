@@ -4,7 +4,39 @@ import 'package:material_ui/material_ui.dart';
 /// pixels switch off (saves battery, no glow in the dark / in VR headsets).
 ThemeData buildTheme(Color seed, Brightness brightness, {bool oled = false}) {
   var scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
-  if (!oled) return ThemeData(colorScheme: scheme, useMaterial3: true);
+  if (brightness == Brightness.light) return ThemeData(colorScheme: scheme, useMaterial3: true);
+  if (!oled) {
+    // Neutral grey dark mode: the seed colour only tints accents, not backgrounds.
+    scheme = scheme.copyWith(
+      surface: const Color(0xFF121212),
+      surfaceDim: const Color(0xFF121212),
+      surfaceBright: const Color(0xFF383838),
+      surfaceContainerLowest: const Color(0xFF0C0C0C),
+      surfaceContainerLow: const Color(0xFF1A1A1A),
+      surfaceContainer: const Color(0xFF1F1F1F),
+      surfaceContainerHigh: const Color(0xFF272727),
+      surfaceContainerHighest: const Color(0xFF313131),
+      onSurface: const Color(0xFFE6E6E6),
+      onSurfaceVariant: const Color(0xFFBDBDBD),
+      outline: const Color(0xFF8A8A8A),
+      outlineVariant: const Color(0xFF3A3A3A),
+      secondaryContainer: const Color(0xFF333333),
+      onSecondaryContainer: const Color(0xFFE6E6E6),
+      surfaceTint: Colors.transparent,
+    );
+    return ThemeData(
+      colorScheme: scheme,
+      useMaterial3: true,
+      scaffoldBackgroundColor: const Color(0xFF121212),
+      appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF121212), surfaceTintColor: Colors.transparent),
+      navigationBarTheme: const NavigationBarThemeData(backgroundColor: Color(0xFF1A1A1A), surfaceTintColor: Colors.transparent),
+      navigationRailTheme: const NavigationRailThemeData(backgroundColor: Color(0xFF121212)),
+      cardTheme: const CardThemeData(color: Color(0xFF1E1E1E), surfaceTintColor: Colors.transparent),
+      dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF242424), surfaceTintColor: Colors.transparent),
+      popupMenuTheme: const PopupMenuThemeData(color: Color(0xFF2A2A2A), surfaceTintColor: Colors.transparent),
+      bottomSheetTheme: const BottomSheetThemeData(backgroundColor: Color(0xFF1E1E1E), surfaceTintColor: Colors.transparent),
+    );
+  }
 
   const black = Colors.black;
   scheme = scheme.copyWith(
@@ -17,7 +49,11 @@ ThemeData buildTheme(Color seed, Brightness brightness, {bool oled = false}) {
     surfaceContainerHigh: const Color(0xFF141414),
     surfaceContainerHighest: const Color(0xFF1B1B1B),
     onSurface: const Color(0xFFEDEDED),
+    onSurfaceVariant: const Color(0xFFBDBDBD),
     outlineVariant: const Color(0xFF262626),
+    secondaryContainer: const Color(0xFF262626),
+    onSecondaryContainer: const Color(0xFFEDEDED),
+    surfaceTint: Colors.transparent,
   );
   return ThemeData(
     colorScheme: scheme,
