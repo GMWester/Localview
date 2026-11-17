@@ -38,6 +38,10 @@ abstract final class Msg {
   static const rtcIce = 0x53;
   static const rtcStop = 0x54;
   static const rtcError = 0x55;
+  /// Viewer -> host: {mode: 'host' | 'viewer'} - where the sound plays (only there).
+  static const audioRoute = 0x56;
+  /// Host -> viewer: {mode, error?}
+  static const audioRouteResult = 0x57;
 
   /// Gamepad state: [type][pad][u16 buttons][u8 lt][u8 rt][i16 lx][i16 ly][i16 rx][i16 ry] (XInput layout).
   static const gamepad = 0x60;

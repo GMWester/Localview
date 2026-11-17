@@ -18,6 +18,7 @@ import 'storage.dart';
 import 'upnp.dart';
 import 'background.dart';
 import 'client.dart';
+import 'platform/speakers.dart';
 
 /// Owns long-lived services: hosting, discovery responder, UPnP, drive mounts.
 class AppController extends ChangeNotifier {
@@ -68,6 +69,35 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  // Sound only on the controlling device: viewers (session ids) that asked for it.
+  final Speakers? _speakers = createSpeakers();
+  final Set<int> _soundHere = {};
+  bool _silenced = false;
+
+  Future<String?> _applySpeakers() async {
+    final want = _soundHere.isNotEmpty;
+    if (want == _silenced || _speakers == null) return null;
+    final err = await _speakers.silence(want);
+    if (err == null) {
+      _silenced = want;
+      // Linux: the sound now plays into another output; re-capture it for running streams.
+      for (final r in _rtc.values) {
+        unawaited(r.reloadAudio().catchError((_) {}));
+      }
+    }
+    return err;
+  }
+
+  Future<void> _routeAudio(int sid, String mode) async {
+    if (mode == 'viewer') {
+      _soundHere.add(sid);
+    } else {
+      _soundHere.remove(sid);
+    }
+    final err = _speakers == null ? 'This device cannot silence its speakers' : await _applySpeakers();
+    host.sendRtc(sid, jsonMsg(Msg.audioRouteResult, {'mode': mode, 'error': ?err}));
+  }
+
   Future<void> init() async {
     if (Platform.isAndroid) {
       try {
@@ -95,9 +125,14 @@ class AppController extends ChangeNotifier {
       ..onRotate = (Platform.isAndroid ? AndroidBridge.setRotation : null);
     host
       ..rtcCapable = rtcHostSupported && await rtcUsable()
+      ..audioRouteCapable = _speakers != null
       ..padsCapable = pads != null
       ..vrCapable = pcvrHostSupported
       ..onRtc = ((sid, m) {
+        if (m[0] == Msg.audioRoute) {
+          unawaited(_routeAudio(sid, jsonBody(m)['mode'] as String? ?? 'host'));
+          return;
+        }
         if (Msg.isVr(m[0])) {
           unawaited(PcvrHost(send: (x) => host.sendRtc(sid, x), upnp: kHasWan ? upnp : null).handle(m));
           return;
@@ -105,7 +140,10 @@ class AppController extends ChangeNotifier {
         final r = _rtc.putIfAbsent(sid, () => RtcHostSession((x) => host.sendRtc(sid, x)));
         unawaited(r.handle(m));
       })
-      ..onSessionEnded = ((sid) => unawaited(_rtc.remove(sid)?.stop()));
+      ..onSessionEnded = ((sid) {
+        unawaited(_rtc.remove(sid)?.stop());
+        if (_soundHere.remove(sid)) unawaited(_applySpeakers());
+      });
     host.addListener(notifyListeners);
     if (Platform.isLinux && (Platform.environment['XDG_SESSION_TYPE'] ?? '') == 'wayland') {
       hostWarning = 'Wayland session detected: screen capture only works in an X11 (Xorg) session.';
@@ -179,6 +217,7 @@ class AppController extends ChangeNotifier {
 
   /// Quits completely: disconnects, unmounts drives, stops hosting and the background service.
   Future<void> quit() async {
+    if (_silenced) await _speakers?.silence(false);
     for (final c in clients.toList()) {
       try {
         await c.close().timeout(const Duration(seconds: 2));

@@ -2,6 +2,7 @@
 
 ## 1.9.0
 
+- **Choose where the sound plays**: when you control a Windows or Linux computer, a speaker / headphones button in the session toolbar switches the sound between playing **only on the controlled computer** and **only on the device you control it from**. Game mode starts with the sound on your device. On Windows the computer's speakers are muted (on a few audio drivers this also silences the streamed sound; switch back if you hear nothing); on Linux the sound is routed into a private Localview output instead, so the speakers stay silent and the stream keeps working. The speakers come back when you switch back or disconnect. macOS and Android devices can't send their sound, so the button isn't shown for them.
 - **Localview Pro for Android** (new `android-pro` release files): the Android app plus a small helper that runs with adb *shell* privileges, so a computer controlling the phone or tablet sends **real mouse and keyboard events**: hover, real left / right / middle clicks, the real scroll wheel, keyboard shortcuts and real key presses (also in games), instead of simulated touches. Start it from the computer through ADB over Localview: *⋮ → ADB (wireless debugging)… → Start real mouse & keyboard* (needed again after each restart of the device). The helper only answers the Localview app on that device. The regular Android build is unchanged.
 
 ## 1.8.0
