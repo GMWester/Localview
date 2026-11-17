@@ -79,7 +79,6 @@ object XrBridge {
                         savedPose?.let { panel.setPose(it) }
                         savedSize = null
                         savedPose = null
-                        scene.spatialEnvironment.preferredPassthroughOpacity = null
                         scene.spatialEnvironment.preferredSpatialEnvironment = null
                         scene.requestHomeSpace()
                         result.success(true)
