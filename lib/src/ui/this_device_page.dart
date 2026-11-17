@@ -7,6 +7,9 @@ import '../app_controller.dart';
 import '../config.dart';
 import '../platform/android.dart';
 import '../platform/macos.dart' as mac;
+import '../updater.dart';
+import 'two_factor.dart';
+import 'theme.dart';
 
 class ThisDevicePage extends StatefulWidget {
   const ThisDevicePage({super.key, required this.app});
@@ -42,6 +45,7 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
   Future<void> _setPassword() async {
     final a = TextEditingController(), b = TextEditingController();
     final ok = await showDialog<bool>(
+      animationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Set device password'),
@@ -80,6 +84,7 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
   Future<void> _showPassword() async {
     final pw = app.store.password;
     await showDialog<void>(
+      animationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('This device\'s password'),
@@ -117,6 +122,7 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
   Future<void> _rename() async {
     final c = TextEditingController(text: app.store.deviceName);
     final v = await showDialog<String>(
+      animationStyle: dialogAnimation(),
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Device name'),
@@ -165,6 +171,27 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                     IconButton(tooltip: 'Show password', icon: const Icon(Icons.visibility_outlined), onPressed: _showPassword),
                   FilledButton.tonal(onPressed: _setPassword, child: Text(s.hasPassword ? 'Change' : 'Set password')),
                 ]),
+              ),
+              ListTile(
+                leading: Icon(s.totpEnabled ? Icons.verified_user : Icons.verified_user_outlined,
+                    color: s.totpEnabled ? Colors.green : null),
+                title: const Text('Two-factor authentication'),
+                subtitle: Text(s.totpEnabled
+                    ? 'On — connecting also needs the code from your authenticator app'
+                    : 'Off — add an authenticator app for a second check on every connection'),
+                trailing: FilledButton.tonal(
+                  onPressed: () async {
+                    final m = ScaffoldMessenger.of(context);
+                    final changed = s.totpEnabled ? await disableTwoFactor(context, s) : await setupTwoFactor(context, s);
+                    if (changed) {
+                      m.showSnackBar(SnackBar(
+                          content: Text(s.totpEnabled
+                              ? 'Two-factor authentication is on.'
+                              : 'Two-factor authentication is off.')));
+                    }
+                  },
+                  child: Text(s.totpEnabled ? 'Turn off' : 'Set up'),
+                ),
               ),
               if (kCanHost)
                 SwitchListTile(
@@ -303,6 +330,16 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                   },
                 ),
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.animation),
+                title: const Text('Animations'),
+                subtitle: const Text('Page transitions, touch ripples and dialog animations'),
+                value: s.animations,
+                onChanged: (v) async {
+                  s.animations = v;
+                  await s.save();
+                },
+              ),
             ]),
           ),
           Card(
@@ -340,6 +377,7 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
               ),
             ]),
           ),
+          const _UpdatesCard(),
           Padding(
             padding: const EdgeInsets.all(8),
             child: Text('Localview $kModeLabel $kAppVersion · end-to-end encrypted (X25519 + ChaCha20-Poly1305)',
@@ -347,6 +385,137 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
           ),
         ]);
       },
+    );
+  }
+}
+
+/// Bottom of "This device": check for and install a newer Localview.
+class _UpdatesCard extends StatefulWidget {
+  const _UpdatesCard();
+  @override
+  State<_UpdatesCard> createState() => _UpdatesCardState();
+}
+
+class _UpdatesCardState extends State<_UpdatesCard> {
+  static UpdateInfo? _cached; // one automatic check per app start
+  UpdateInfo? _info = _cached;
+  bool _checking = false;
+  double? _progress;
+  String? _message;
+  bool _restartReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cached == null) _check();
+  }
+
+  Future<void> _check() async {
+    setState(() {
+      _checking = true;
+      _message = null;
+    });
+    try {
+      final u = await checkForUpdate();
+      _cached = u;
+      if (mounted) setState(() => _info = u);
+    } catch (e) {
+      if (mounted) setState(() => _message = 'Could not check for updates: $e');
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _update() async {
+    final u = _info;
+    if (u == null || u.assetUrl == null) return;
+    setState(() {
+      _progress = 0;
+      _message = 'Downloading ${u.assetName}…';
+    });
+    try {
+      final f = await downloadUpdate(u, (p) {
+        if (mounted) setState(() => _progress = p);
+      });
+      if (mounted) setState(() => _message = 'Installing…');
+      final msg = await installUpdate(f);
+      if (mounted) {
+        setState(() {
+          _message = msg ?? 'Follow the installer to finish the update.';
+          _restartReady = msg != null && msg.startsWith('Updated');
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _message = 'Update failed: $e');
+    } finally {
+      if (mounted) setState(() => _progress = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final u = _info;
+    final busy = _progress != null;
+    String status;
+    if (_checking) {
+      status = 'Checking for updates…';
+    } else if (u == null) {
+      status = 'Version $kAppVersion';
+    } else if (u.newer) {
+      status = 'Version ${u.version} is available (you have $kAppVersion).';
+    } else {
+      status = 'You have the latest version ($kAppVersion).';
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(u?.newer == true ? Icons.system_update : Icons.update),
+            title: Text('Updates', style: tt.titleMedium),
+            subtitle: Text(status),
+          ),
+          if (u != null && u.newer && u.notes.isNotEmpty && !_restartReady)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text("What's new in ${u.version}", style: tt.labelLarge),
+                const SizedBox(height: 4),
+                Text(u.notes, style: tt.bodySmall, maxLines: 8, overflow: TextOverflow.ellipsis),
+              ]),
+            ),
+          if (busy) ...[LinearProgressIndicator(value: _progress), const SizedBox(height: 8)],
+          if (_message != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_message!, style: tt.bodySmall)),
+          Wrap(spacing: 10, runSpacing: 8, children: [
+            if (_restartReady)
+              FilledButton.icon(onPressed: restartApp, icon: const Icon(Icons.restart_alt), label: const Text('Restart now'))
+            else if (u != null && u.newer && u.assetUrl != null && !Platform.isIOS)
+              FilledButton.icon(
+                onPressed: busy ? null : _update,
+                icon: const Icon(Icons.download),
+                label: Text('Update to ${u.version}'),
+              ),
+            if (u != null && u.newer && (u.assetUrl == null || Platform.isIOS))
+              FilledButton.tonalIcon(
+                onPressed: () => Clipboard.setData(ClipboardData(text: u.pageUrl)),
+                icon: const Icon(Icons.copy),
+                label: const Text('Copy download link'),
+              ),
+            OutlinedButton.icon(
+              onPressed: _checking || busy ? null : _check,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Check for updates'),
+            ),
+          ]),
+          if (u != null && u.newer && Platform.isIOS)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('iOS apps can\'t update themselves: sideload the new .ipa from the release page.', style: tt.bodySmall),
+            ),
+        ]),
+      ),
     );
   }
 }

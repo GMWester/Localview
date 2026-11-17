@@ -29,9 +29,6 @@ android {
     }
 
     defaultConfig {
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
         applicationId = "io.localview.localview.$lvMode"
         manifestPlaceholders["appLabel"] = when (lvMode) {
             "combined" -> "Localview"
@@ -49,12 +46,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // A permanent release key (CI secret ANDROID_KEYSTORE_B64) keeps in-app updates
+    // installable: Android only accepts an update signed with the same key.
+    val releaseKeystore = System.getenv("LV_KEYSTORE")?.takeIf { it.isNotEmpty() && file(it).exists() }
+    signingConfigs {
+        create("release") {
+            if (releaseKeystore != null) {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("LV_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("LV_KEY_ALIAS") ?: "localview"
+                keyPassword = System.getenv("LV_KEY_PASSWORD") ?: System.getenv("LV_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 }
@@ -67,6 +75,10 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.16.0")
 }
 
 // Jetpack XR SceneCore: Virtual-Desktop-style theater (Full Space + large screen).
