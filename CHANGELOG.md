@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.1
+
+- **Android, Android Pro, Android TV and Android XR / Quest builds are back**: they were missing from 1.9.0 because the new sound player didn't build on Android. Everything listed under 1.9.0 for Android (sound from Android devices, Localview Pro) arrives with this version.
+- **Localview Pro: the sound moves off the Android device** (Android 12+): when you switch the sound to your device while Localview Pro's helper is running, the helper records the device's whole sound output directly. Android then plays it only through Localview, so the device's speaker is silent without touching its volume, and apps that block normal capture (some streaming apps) come through as well. Restart the helper once after updating (*⋮ → ADB (wireless debugging)… → Start real mouse & keyboard*). Without the helper, or on Android 10–11, the 1.9.0 behaviour stays: the sound is copied and the device's media volume is turned down while it plays on your device.
+
 ## 1.9.0
 
 - **Choose where the sound plays**: when you control a Windows or Linux computer, a speaker / headphones button in the session toolbar switches the sound between playing **only on the controlled computer** and **only on the device you control it from**. Game mode starts with the sound on your device. On Windows the computer's speakers are muted (on a few audio drivers this also silences the streamed sound; switch back if you hear nothing); on Linux the sound is routed into a private Localview output instead, so the speakers stay silent and the stream keeps working. The speakers come back when you switch back or disconnect. macOS computers can't send their sound, so the button isn't shown for them.
