@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.1
+
+- **Fixed: a connected device's storage not appearing as a drive on Windows** when the device's name contains spaces (e.g. "My Android device"). The drive's web address no longer contains spaces (Explorer still shows the friendly name), and Localview retries with Windows' `\\127.0.0.1@port\…` form if the first attempt is refused.
+- When you connect, Localview now says which drive letter the device's storage got, or why Windows refused the drive, instead of failing silently.
+
 ## 1.7.0
 
 - **Much lower latency when controlling an Android device** (phones, tablets, Android TV, headsets): the device now compresses its screen natively (Android's JPEG encoder) instead of sending pixel tiles compressed in Dart, so frames are a fraction of the size and ready in milliseconds; nothing is sent while the screen is still. Controlling a phone from a PC went from 0.5–2 s behind to near real time. Viewers older than 1.7.0 keep the previous format.
