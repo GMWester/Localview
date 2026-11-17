@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.0
+
+- **Live touch when controlling Android** (Android 8+): pressing the mouse button puts the finger down immediately, it follows the pointer while you hold it and lifts on release. Previously a drag was only replayed after you let go (at the speed you dragged), which made scrolling and swiping on a phone lag by up to a couple of seconds. Holding the button is now a real long-press. Android 7 keeps the previous behaviour.
+- **Smoother wheel scrolling on Android**: wheel notches are combined into one quick swipe instead of many slow ones that cancelled each other.
+- **Faster Android video**: while you watch, each new screen image is compressed as soon as it is captured, so it is ready the moment it is needed, and phone screens are streamed at up to 1440 pixels (the *Resolution* setting still applies).
+
 ## 1.7.1
 
 - **Fixed: a connected device's storage not appearing as a drive on Windows** when the device's name contains spaces (e.g. "My Android device"). The drive's web address no longer contains spaces (Explorer still shows the friendly name), and Localview retries with Windows' `\\127.0.0.1@port\…` form if the first attempt is refused.

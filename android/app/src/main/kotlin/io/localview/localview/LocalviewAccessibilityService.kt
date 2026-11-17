@@ -5,6 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -36,6 +37,48 @@ class LocalviewAccessibilityService : AccessibilityService() {
         dispatchGesture(g, null, null)
     }
 
+    // Live touch (Android 8+): the finger goes down when the remote button is pressed, follows
+    // the pointer while it is held and lifts on release - no waiting for the whole gesture.
+    private var live: GestureDescription.StrokeDescription? = null
+    private var liveX = 0f
+    private var liveY = 0f
+    private var liveAt = 0L
+
+    val supportsLiveTouch: Boolean get() = Build.VERSION.SDK_INT >= 26
+
+    fun touchDown(x: Double, y: Double) {
+        if (Build.VERSION.SDK_INT < 26) return
+        val (w, h) = screen()
+        liveX = (x * w).toFloat().coerceIn(0f, w - 1)
+        liveY = (y * h).toFloat().coerceIn(0f, h - 1)
+        liveAt = SystemClock.uptimeMillis()
+        val s = GestureDescription.StrokeDescription(Path().apply { moveTo(liveX, liveY) }, 0, 1, true)
+        live = s
+        dispatchGesture(GestureDescription.Builder().addStroke(s).build(), null, null)
+    }
+
+    fun touchMove(x: Double, y: Double, end: Boolean) {
+        if (Build.VERSION.SDK_INT < 26) return
+        val prev = live ?: return
+        val (w, h) = screen()
+        val nx = (x * w).toFloat().coerceIn(0f, w - 1)
+        val ny = (y * h).toFloat().coerceIn(0f, h - 1)
+        val now = SystemClock.uptimeMillis()
+        val ms = (now - liveAt).coerceIn(1L, 100L)
+        val path = Path().apply { moveTo(liveX, liveY); lineTo(nx, ny) }
+        val next = try {
+            prev.continueStroke(path, 0, ms, !end)
+        } catch (_: Exception) {
+            live = null
+            return
+        }
+        live = if (end) null else next
+        liveX = nx
+        liveY = ny
+        liveAt = now
+        dispatchGesture(GestureDescription.Builder().addStroke(next).build(), null, null)
+    }
+
     fun tap(x: Double, y: Double, ms: Long) {
         val (w, h) = screen()
         stroke(Path().apply { moveTo((x * w).toFloat(), (y * h).toFloat()) }, ms)
@@ -56,7 +99,8 @@ class LocalviewAccessibilityService : AccessibilityService() {
         val sx = (x * w).toFloat(); val sy = (y * h).toFloat()
         val ex = (sx - dx * w * 0.06).toFloat().coerceIn(1f, w - 1)
         val ey = (sy - dy * h * 0.06).toFloat().coerceIn(1f, h - 1)
-        stroke(Path().apply { moveTo(sx, sy); lineTo(ex, ey) }, 200)
+        // Short and quick: several wheel notches arrive already combined into one swipe.
+        stroke(Path().apply { moveTo(sx, sy); lineTo(ex, ey) }, 90)
     }
 
     fun global(action: Int) {
