@@ -93,6 +93,8 @@ jobs:
             awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md | sed '/^$/d'
             echo
             cat <<'NOTES'
+            > **Easiest way to install: get the [Localview Installer](https://github.com/GMWester/LocalViewInstaller/releases/latest).** Pick your device, processor and version in the app and it downloads, installs and launches the right Localview for you — no need to find the matching file below.
+            
             One release for every platform. Pick your device, then a variant:
             
             * **Combined** (recommended): nearby devices are listed automatically and anything you connect to once is saved to *My devices*, reachable from anywhere.
@@ -102,6 +104,7 @@ jobs:
             | Device | Installer | Portable |
             |---|---|---|
             | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup.exe` | `…-windows-x64.zip` |
+            | Windows 11 on ARM (Snapdragon, Surface Pro X) | `Localview-<variant>-windows-arm64-setup.exe` | `…-windows-arm64.zip` |
             | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
             | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` (Debian/Ubuntu), `localview-<variant>-<version>-1.<arch>.rpm` (Fedora/RHEL/openSUSE) | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
             | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
