@@ -93,6 +93,8 @@ jobs:
             awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md | sed '/^$/d'
             echo
             cat <<'NOTES'
+            > **Easiest way to install: get the [Localview Installer](https://github.com/GMWester/LocalViewInstaller/releases/latest).** Pick your device, processor and version in the app and it downloads, installs and launches the right Localview for you — no need to find the matching file below.
+            
             One release for every platform. Pick your device, then a variant:
             
             * **Combined** (recommended): nearby devices are listed automatically and anything you connect to once is saved to *My devices*, reachable from anywhere.
@@ -102,6 +104,7 @@ jobs:
             | Device | Installer | Portable |
             |---|---|---|
             | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup.exe` | `…-windows-x64.zip` |
+            | Windows 11 on ARM (Snapdragon, Surface Pro X) | `Localview-<variant>-windows-arm64-setup.exe` | `…-windows-arm64.zip` |
             | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
             | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` (Debian/Ubuntu), `localview-<variant>-<version>-1.<arch>.rpm` (Fedora/RHEL/openSUSE) | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
             | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
@@ -112,6 +115,7 @@ jobs:
             
             Everything is end-to-end encrypted (X25519 + ChaCha20-Poly1305; game mode media is DTLS-SRTP keyed through that channel).
             **Game mode** streams Windows/macOS/Linux PCs with hardware H.264 video, system audio and controller passthrough (up to 4K60 / 1080p120).
+            **PC VR** streams SteamVR games to Meta Quest and Android XR headsets from a Windows, Linux (x64) or SteamOS PC, including Windows VR games running through Proton.
           NOTES
             echo
             echo "Source-Commit: $SOURCE_COMMIT"

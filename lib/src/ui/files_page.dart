@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../client.dart';
 import '../files.dart';
+import 'theme.dart';
 
 /// In-app browser for the remote device's storage (always available; on iOS it
 /// is the way to reach remote files since iOS has no user-mountable drives).
@@ -92,13 +93,13 @@ class _FilesPageState extends State<FilesPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('${widget.session.peerName}: $_path', overflow: TextOverflow.ellipsis),
-        bottom: _progress == null ? null : PreferredSize(preferredSize: const Size.fromHeight(4), child: LinearProgressIndicator(value: _progress)),
+        bottom: _progress == null ? null : PreferredSize(preferredSize: const Size.fromHeight(4), child: progressBar(_progress)),
         actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
       ),
       body: _error != null
           ? Center(child: Text(_error!))
           : _items == null
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(child: busyIndicator())
               : ListView(children: [
                   if (parent != null) ListTile(leading: const Icon(Icons.arrow_upward), title: const Text('..'), onTap: () => _cd(parent)),
                   for (final e in _items!)

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'src/app_controller.dart';
 import 'src/config.dart';
+import 'src/files.dart';
 import 'src/storage.dart';
 import 'src/ui/home_page.dart';
 import 'src/ui/theme.dart';
@@ -20,7 +21,7 @@ Future<void> main() async {
 
 Future<String?> _defaultFsRoot() async {
   if (Platform.isWindows) return null; // all drive letters
-  if (Platform.isAndroid) return '/storage/emulated/0';
+  if (Platform.isAndroid) return kAndroidVolumesRoot; // internal storage + SD cards / USB drives
   if (Platform.isIOS) return (await getApplicationDocumentsDirectory()).path;
   return '/';
 }
@@ -36,10 +37,11 @@ class LocalviewApp extends StatelessWidget {
       listenable: app.store,
       builder: (context, _) {
         final t = app.store.theme;
-        animationsEnabled = app.store.animations;
+        setAnimationsEnabled(app.store.animations);
         return MaterialApp(
           title: 'Localview $kModeLabel',
           debugShowCheckedModeBanner: false,
+          scrollBehavior: const LocalviewScrollBehavior(),
           theme: applyAnimationPreference(buildTheme(seed, Brightness.light)),
           darkTheme: applyAnimationPreference(buildTheme(seed, Brightness.dark, oled: t == 'oled')),
           builder: (context, child) => animationsEnabled

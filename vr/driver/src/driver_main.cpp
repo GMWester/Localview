@@ -4,6 +4,9 @@
 #include <memory>
 
 #include "devices.h"
+#ifndef _WIN32
+#include "linux/capture_linux.h"
+#endif
 
 class DeviceProvider : public vr::IServerTrackedDeviceProvider {
  public:
@@ -13,15 +16,25 @@ class DeviceProvider : public vr::IServerTrackedDeviceProvider {
       // No pending Localview VR session: let SteamVR use other headsets.
       return vr::VRInitError_Init_HmdNotFound;
     }
+    auto onEncoded = [this](const uint8_t* d, size_t n, bool key, uint64_t frame) { OnEncoded(d, n, key, frame); };
+#ifdef _WIN32
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (!comp_.Init()) return vr::VRInitError_Driver_Failed;
     hmd_ = std::make_unique<Hmd>(session_, &comp_, &enc_);
-    ctrl_[0] = std::make_unique<Controller>(0, session_.controllerPitchDeg);
-    ctrl_[1] = std::make_unique<Controller>(1, session_.controllerPitchDeg);
     if (!enc_.Init(comp_.Device(), session_.eyeWidth * 2, session_.eyeHeight, session_.refreshHz, session_.bitrateMbps,
-                   [this](const uint8_t* d, size_t n, bool key, uint64_t frame) { OnEncoded(d, n, key, frame); })) {
+                   onEncoded)) {
       return vr::VRInitError_Driver_Failed;
     }
+#else
+    hmd_ = std::make_unique<Hmd>(session_);
+    // Frames arrive from the capture layer inside vrcompositor once it starts.
+    if (!streamer_.Start(session_.eyeWidth * 2, session_.eyeHeight, session_.refreshHz, session_.bitrateMbps,
+                         [this](const vr::HmdMatrix34_t& m) { return hmd_->RecordFrame(m); }, onEncoded)) {
+      return vr::VRInitError_Driver_Failed;
+    }
+#endif
+    ctrl_[0] = std::make_unique<Controller>(0, session_.controllerPitchDeg);
+    ctrl_[1] = std::make_unique<Controller>(1, session_.controllerPitchDeg);
     if (!net_.Start(session_.port, session_.key, [this](uint8_t t, const uint8_t* p, size_t n) { OnPacket(t, p, n); })) {
       return vr::VRInitError_Driver_Failed;
     }
@@ -33,7 +46,11 @@ class DeviceProvider : public vr::IServerTrackedDeviceProvider {
 
   void Cleanup() override {
     net_.Stop();
+#ifdef _WIN32
     enc_.Shutdown();
+#else
+    streamer_.Stop();
+#endif
     VR_CLEANUP_SERVER_DRIVER_CONTEXT();
   }
 
@@ -73,7 +90,9 @@ class DeviceProvider : public vr::IServerTrackedDeviceProvider {
     lastPacket_ = std::chrono::steady_clock::now();
     if (!connected_) {
       connected_ = true;
+#ifdef _WIN32
       enc_.ForceKeyframe();
+#endif
     }
     switch (type) {
       case lvvr::kTracking:
@@ -89,7 +108,10 @@ class DeviceProvider : public vr::IServerTrackedDeviceProvider {
         auto now = std::chrono::steady_clock::now();
         if (now - lastIdr_ > std::chrono::milliseconds(200)) {
           lastIdr_ = now;
+#ifdef _WIN32
           enc_.ForceKeyframe();
+#endif
+          // Linux: the encoder sends a keyframe every second.
         }
         break;
       }
@@ -111,8 +133,12 @@ class DeviceProvider : public vr::IServerTrackedDeviceProvider {
   }
 
   VrSession session_;
+#ifdef _WIN32
   Compositor comp_;
   Encoder enc_;
+#else
+  LinuxStreamer streamer_;
+#endif
   Network net_;
   std::unique_ptr<Hmd> hmd_;
   std::unique_ptr<Controller> ctrl_[2];
@@ -123,7 +149,13 @@ class DeviceProvider : public vr::IServerTrackedDeviceProvider {
 
 static DeviceProvider g_provider;
 
-extern "C" __declspec(dllexport) void* HmdDriverFactory(const char* name, int* ret) {
+#ifdef _WIN32
+#define LV_EXPORT extern "C" __declspec(dllexport)
+#else
+#define LV_EXPORT extern "C" __attribute__((visibility("default")))
+#endif
+
+LV_EXPORT void* HmdDriverFactory(const char* name, int* ret) {
   if (strcmp(vr::IServerTrackedDeviceProvider_Version, name) == 0) return &g_provider;
   if (ret) *ret = vr::VRInitError_Init_InterfaceNotFound;
   return nullptr;
