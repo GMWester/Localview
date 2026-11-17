@@ -181,18 +181,49 @@ class RtcHostSession {
       }
     }
     for (final a in audioTracks) {
-      await pc.addTransceiver(
+      final t = await pc.addTransceiver(
         track: a,
         kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
         init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendOnly, streams: [_screen!]),
       );
+      _audioSenders.add(t.sender);
     }
     _audioCount = audioTracks.length;
+  }
+
+  final List<RTCRtpSender> _audioSenders = [];
+
+  /// Re-captures the system sound (e.g. after the sound moved to another output on Linux).
+  Future<void> reloadAudio() async {
+    if (_audioSenders.isEmpty) return;
+    final dev = await _loopbackInput();
+    if (dev == null) return;
+    final old = _extraAudio;
+    final fresh = await navigator.mediaDevices.getUserMedia({
+      'audio': {
+        'deviceId': {'exact': dev},
+        'echoCancellation': false,
+        'noiseSuppression': false,
+        'autoGainControl': false,
+      },
+      'video': false,
+    });
+    final tracks = fresh.getAudioTracks();
+    if (tracks.isEmpty) return;
+    await _audioSenders.first.replaceTrack(tracks.first);
+    _extraAudio = fresh;
+    for (final x in old?.getTracks() ?? const <MediaStreamTrack>[]) {
+      await x.stop();
+    }
   }
 
   static Future<String?> _loopbackInput() async {
     try {
       final devs = await navigator.mediaDevices.enumerateDevices();
+      // While the speakers are silenced on Linux, the sound plays into Localview's own sink.
+      for (final d in devs) {
+        if (d.kind == 'audioinput' && d.label.toLowerCase().contains('localview')) return d.deviceId;
+      }
       for (final d in devs) {
         if (d.kind != 'audioinput') continue;
         final l = d.label.toLowerCase();
@@ -241,6 +272,7 @@ class RtcHostSession {
     }
     _screen = null;
     _extraAudio = null;
+    _audioSenders.clear();
     try {
       await pc?.close();
       await pc?.dispose();
@@ -258,6 +290,17 @@ class RtcClient extends ChangeNotifier {
   bool active = false; // first frame shown
   bool hasAudio = false;
   String? error;
+
+  /// Plays the remote sound here (false: muted on this device).
+  bool playAudio = true;
+  final List<MediaStreamTrack> _remoteAudio = [];
+
+  void setAudioEnabled(bool on) {
+    playAudio = on;
+    for (final t in _remoteAudio) {
+      t.enabled = on;
+    }
+  }
   String stats = '';
   Timer? _statsTimer;
   int _lastBytes = 0;
@@ -291,6 +334,10 @@ class RtcClient extends ChangeNotifier {
             }
           };
           pc.onTrack = (e) {
+            if (e.track.kind == 'audio') {
+              e.track.enabled = playAudio;
+              _remoteAudio.add(e.track);
+            }
             if (e.track.kind == 'video' && e.streams.isNotEmpty) {
               renderer.srcObject = e.streams.first;
               notifyListeners();

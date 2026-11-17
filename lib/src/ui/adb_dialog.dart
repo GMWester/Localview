@@ -165,6 +165,30 @@ class _AdbDialogState extends State<_AdbDialog> {
               ),
             ),
         ],
+        if (i['proCommand'] != null) ...[
+          const Divider(height: 24),
+          Text('Real mouse & keyboard (Localview Pro): ${i['proRunning'] == true ? 'running' : 'not running'}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          if (i['proRunning'] != true) ...[
+            const SizedBox(height: 4),
+            Text('Starts a small helper on $name that sends real mouse and keyboard events (hover, right-click, '
+                'wheel, shortcuts). Start it again after $name restarts.'),
+            const SizedBox(height: 8),
+            if (_adb != null && _connectLocal != null)
+              FilledButton(
+                onPressed: _busy
+                    ? null
+                    : () async {
+                        await _run(['-s', '127.0.0.1:$_connectLocal', 'shell', i['proCommand'] as String]);
+                        await Future<void>.delayed(const Duration(milliseconds: 1500));
+                        if (mounted) await _refresh();
+                      },
+                child: const Text('Start real mouse & keyboard'),
+              )
+            else
+              _command('adb -s 127.0.0.1:${_connectLocal ?? '<port>'} shell "${i['proCommand']}"'),
+          ],
+        ],
         if (_adb == null && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
           const Padding(
             padding: EdgeInsets.only(top: 8),

@@ -340,6 +340,7 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                   await s.save();
                 },
               ),
+              if (Platform.isAndroid) const _ProTile(),
               if (Platform.isAndroid)
                 SwitchListTile(
                   secondary: const Icon(Icons.adb),
@@ -581,4 +582,44 @@ Future<void> _quit(BuildContext context, AppController app) async {
     if (ok != true) return;
   }
   await app.quit();
+}
+
+/// Localview Pro (android-pro build): status of the real mouse & keyboard helper.
+class _ProTile extends StatefulWidget {
+  const _ProTile();
+  @override
+  State<_ProTile> createState() => _ProTileState();
+}
+
+class _ProTileState extends State<_ProTile> {
+  Map<String, Object?>? _st;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final st = await AndroidBridge.proStatus();
+      if (mounted) setState(() => _st = st);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final st = _st;
+    if (st == null || st['pro'] != true) return const SizedBox.shrink();
+    final running = st['running'] == true;
+    return ListTile(
+      leading: Icon(running ? Icons.mouse : Icons.mouse_outlined),
+      title: Text('Real mouse & keyboard: ${running ? 'on' : 'off'}'),
+      subtitle: Text(running
+          ? 'Computers controlling this device send real mouse and keyboard events.'
+          : 'Turn on "ADB over Localview" and Wireless debugging, then on the computer: '
+              '⋮ → ADB (wireless debugging)… → Start real mouse & keyboard. Needed again after a restart.'),
+      trailing: IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _load),
+    );
+  }
 }
