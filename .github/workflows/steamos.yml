@@ -36,6 +36,7 @@ jobs:
       - run: flutter build linux --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }} --dart-define=LV_FLAVOR=steamos
       - name: PC VR SteamVR driver + compositor capture layer (x64 - SteamVR for Linux is x64 only)
         if: matrix.arch == 'x64'
+        timeout-minutes: 15
         run: |
           sudo apt-get install -y libvulkan-dev glslang-tools libunwind-dev libdrm-dev libx11-dev libxrandr-dev
           cmake -S vr/driver -B vr/build -DCMAKE_BUILD_TYPE=Release

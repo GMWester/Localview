@@ -3,7 +3,7 @@ name: Android build check (dev branch, no release)
 on:
   push:
     branches: [claude/eloquent-darwin-2m7gti]
-    paths: ['android/**', 'lib/**', 'tool/android-pro/**', 'pubspec.yaml', 'pubspec.lock', '.github/workflows/android-check.yml']
+    paths: ['android/**', 'lib/**', 'tool/android-pro/**', 'pubspec.yaml', 'pubspec.lock', '.github/workflows/**']
   workflow_dispatch:
 
 jobs:
