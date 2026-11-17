@@ -51,7 +51,13 @@ class FsException implements Exception {
 }
 
 /// Root that shares every Android storage volume (internal storage, SD cards, USB drives).
+/// Followed by `:<json list of {n: name, p: path}>` when Android reported its volumes.
 const String kAndroidVolumesRoot = 'android:volumes';
+
+/// Root string for the volumes Android reported (StorageManager), see [kAndroidVolumesRoot].
+String androidVolumesRoot(List<({String name, String path})> volumes) => volumes.isEmpty
+    ? kAndroidVolumesRoot
+    : '$kAndroidVolumesRoot:${jsonEncode([for (final v in volumes) {'n': v.name, 'p': v.path}])}';
 
 /// Serves this device's storage to the peer. Virtual paths use '/' separators.
 ///
@@ -61,8 +67,24 @@ const String kAndroidVolumesRoot = 'android:volumes';
 /// "Internal storage" (/storage/emulated/0) and one "SD card (ID)" folder per
 /// SD card or USB drive (/storage/ID).
 class FsServer {
-  FsServer(this.root, {this.storageDir = '/storage'});
+  FsServer(this.root, {this.storageDir = '/storage'}) : _reported = _parseVolumes(root);
   final String? root;
+
+  /// Volumes as reported by Android (name -> mount point); empty: scan [storageDir].
+  final Map<String, String> _reported;
+
+  static Map<String, String> _parseVolumes(String? root) {
+    if (root == null || !root.startsWith('$kAndroidVolumesRoot:')) return const {};
+    try {
+      final l = jsonDecode(root.substring(kAndroidVolumesRoot.length + 1)) as List;
+      return {
+        for (final v in l.cast<Map>())
+          if (v['n'] is String && v['p'] is String && !(v['n'] as String).contains('/')) v['n'] as String: v['p'] as String,
+      };
+    } catch (_) {
+      return const {};
+    }
+  }
 
   /// Where Android mounts storage volumes (overridable for tests).
   final String storageDir;
@@ -70,10 +92,15 @@ class FsServer {
   static const internalName = 'Internal storage';
   static final _volumeName = RegExp(r'^SD card \(([A-Za-z0-9-]+)\)$');
 
-  bool get _volumes => root == kAndroidVolumesRoot;
+  bool get _volumes => root?.startsWith(kAndroidVolumesRoot) ?? false;
 
   /// Volume folder name -> mount point.
   String _volumePath(String name) {
+    if (_reported.isNotEmpty) {
+      final p = _reported[name];
+      if (p == null) throw FsException('not_found');
+      return p;
+    }
     if (name == internalName) return '$storageDir/emulated/0';
     final m = _volumeName.firstMatch(name);
     if (m == null) throw FsException('not_found');
@@ -82,6 +109,9 @@ class FsServer {
 
   Future<List<FsEntry>> _listVolumes() async {
     final now = DateTime.now().toUtc();
+    if (_reported.isNotEmpty) {
+      return [for (final name in _reported.keys) FsEntry(name, true, 0, now)];
+    }
     final out = [FsEntry(internalName, true, 0, now)];
     try {
       await for (final e in Directory(storageDir).list(followLinks: false)) {
