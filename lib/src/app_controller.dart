@@ -108,6 +108,10 @@ class AppController extends ChangeNotifier {
     localIps = await localAddresses();
     if (kCanHost && store.hostEnabled) await startHosting();
     await background.start();
+    if (Platform.isAndroid) {
+      // SD cards and USB drives come and go: keep the shared volumes current.
+      Timer.periodic(const Duration(seconds: 10), (_) async => store.setFsRoot(await AndroidBridge.storageRoot()));
+    }
     _responder = DiscoveryResponder(() => store.hostEnabled && host.running
         ? {
             'id': store.deviceId,
@@ -166,6 +170,30 @@ class AppController extends ChangeNotifier {
       notifyListeners();
     }
     return where;
+  }
+
+  /// Quits completely: disconnects, unmounts drives, stops hosting and the background service.
+  Future<void> quit() async {
+    for (final c in clients.toList()) {
+      try {
+        await c.close().timeout(const Duration(seconds: 2));
+      } catch (_) {}
+    }
+    for (final k in mountedDrives.keys.toList()) {
+      try {
+        await unmountDrive(k).timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
+    try {
+      await host.stop().timeout(const Duration(seconds: 2));
+    } catch (_) {}
+    if (Platform.isAndroid) {
+      try {
+        await androidChannel.invokeMethod('setKeepAlive', {'on': false, 'tip': ''});
+        await AndroidBridge.stopCapture();
+      } catch (_) {}
+    }
+    exit(0);
   }
 
   Future<void> unmountDrive(String key) async {
