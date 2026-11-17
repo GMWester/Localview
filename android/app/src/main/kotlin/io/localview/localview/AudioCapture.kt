@@ -21,6 +21,7 @@ import android.os.Build
 object AudioCapture {
     const val RATE = 48000
     @Volatile private var record: AudioRecord? = null
+    @Volatile private var proIn: java.io.InputStream? = null
     private var thread: Thread? = null
     private val lock = Object()
     private var buf = ByteArray(RATE * 4) // up to 1 s waiting
@@ -36,6 +37,7 @@ object AudioCapture {
     @SuppressLint("MissingPermission")
     @TargetApi(29)
     fun start(ctx: Context, silencePhone: Boolean): String? {
+        if (silencePhone && startPro(ctx)) return null
         if (Build.VERSION.SDK_INT < 29) return "Android 10 or newer is needed to send the phone's sound"
         if (!permitted(ctx)) return "Allow Localview to record audio on the phone (it is used to capture the sound apps play)"
         val p = CaptureService.activeProjection ?: return "Screen sharing is not running on the phone"
@@ -77,13 +79,41 @@ object AudioCapture {
         return null
     }
 
+    /**
+     * Localview Pro (Android 12+): the helper records the whole sound output, which moves it off the
+     * speaker - no volume change, and apps that forbid capture are included.
+     */
+    private fun startPro(ctx: Context): Boolean {
+        synchronized(lock) { if (proIn != null) return true; if (record != null) return false }
+        val input = ProBridge.openAudio(ctx) ?: return false
+        synchronized(lock) { proIn = input; len = 0 }
+        thread = Thread({
+            val chunk = ByteArray(RATE / 50 * 4)
+            try {
+                while (proIn === input) {
+                    val n = input.read(chunk)
+                    if (n < 0) break
+                    if (n == 0) continue
+                    synchronized(lock) {
+                        if (len + n > buf.size) len = 0
+                        System.arraycopy(chunk, 0, buf, len, n)
+                        len += n
+                    }
+                }
+            } catch (_: Exception) {}
+            synchronized(lock) { if (proIn === input) proIn = null }
+        }, "localview-pro-audio").apply { start() }
+        return true
+    }
+
     /** Sound captured since the last call (PCM s16le, stereo, 48 kHz), or null. */
     fun read(): ByteArray? = synchronized(lock) {
         if (len == 0) null else buf.copyOf(len).also { len = 0 }
     }
 
     fun stop(ctx: Context) {
-        val r = synchronized(lock) { val x = record; record = null; len = 0; x }
+        val (r, pin) = synchronized(lock) { val x = record; val y = proIn; record = null; proIn = null; len = 0; Pair(x, y) }
+        try { pin?.close() } catch (_: Exception) {}
         try { r?.stop() } catch (_: Exception) {}
         thread?.join(200)
         thread = null
