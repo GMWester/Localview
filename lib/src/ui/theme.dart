@@ -1,5 +1,30 @@
 import 'package:material_ui/material_ui.dart';
 
+/// Global switch for UI animations (This device → Appearance).
+bool animationsEnabled = true;
+
+/// Animation style for dialogs and sheets (null = default animation).
+AnimationStyle? dialogAnimation() => animationsEnabled ? null : AnimationStyle.noAnimation;
+
+class _NoTransitions extends PageTransitionsBuilder {
+  const _NoTransitions();
+  @override
+  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation, Widget child) =>
+      child;
+}
+
+/// Removes page transitions and touch ripples when animations are off.
+ThemeData applyAnimationPreference(ThemeData t) {
+  if (animationsEnabled) return t;
+  const none = _NoTransitions();
+  return t.copyWith(
+    pageTransitionsTheme: PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: none}),
+    splashFactory: NoSplash.splashFactory,
+    highlightColor: Colors.transparent,
+  );
+}
+
 /// Builds the app themes. [oled] makes every background pure black so OLED
 /// pixels switch off (saves battery, no glow in the dark / in VR headsets).
 ThemeData buildTheme(Color seed, Brightness brightness, {bool oled = false}) {

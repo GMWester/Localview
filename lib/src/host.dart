@@ -13,6 +13,7 @@ import 'net.dart';
 import 'platform/platform.dart';
 import 'protocol.dart';
 import 'storage.dart';
+import 'totp.dart';
 
 /// Snapshot of what the host isolate needs from [AppStore].
 Map<String, Object?> hostConfigFrom(AppStore s, [String? publicIp]) => {
@@ -29,6 +30,7 @@ Map<String, Object?> hostConfigFrom(AppStore s, [String? publicIp]) => {
       'share': s.shareFiles,
       'mount': s.mountDrives,
       'fsRoot': s.fsRoot,
+      'totp': s.totpSecret,
       'trusted': [
         for (final p in s.paired)
           if (p.allowIncoming) {'id': p.id, 'key': p.key}
@@ -211,6 +213,7 @@ class _HostIsolate {
   final Map<int, Completer<RawFrame?>> _grabs = {};
   final Map<int, Completer<String>> _clips = {};
   final Map<String, List<DateTime>> _failures = {};
+  final Set<int> _usedTotpSteps = {};
 
   Future<void> run() async {
     rx.listen((m) => _onMain(m as List));
@@ -338,6 +341,7 @@ class _HostIsolate {
         'eph': base64Encode(eph.publicKey),
         'nonce': base64Encode(nonceH),
         if (salt != null) 'salt': base64Encode(salt),
+        'totp': cfg['totp'] != null,
       })));
       final ecdh = await eph.agree(base64Decode(hello['eph'] as String));
       final keys = await deriveSessionKeys(
@@ -345,11 +349,24 @@ class _HostIsolate {
       final ch = SecureChannel(sendKey: keys.h2c, recvKey: keys.c2h, isClient: false);
       Map auth;
       try {
-        auth = jsonDecode(utf8.decode(await ch.open(await sock.next(timeout: const Duration(seconds: 20))))) as Map;
+        // With 2FA the user types the authenticator code first: allow time for that.
+        final authTimeout = Duration(seconds: cfg['totp'] != null ? 180 : 20);
+        auth = jsonDecode(utf8.decode(await ch.open(await sock.next(timeout: authTimeout)))) as Map;
         if (auth['t'] != 'auth') throw const DecryptError();
       } on DecryptError {
         _recordFailure(ip);
         return reject(mode == 'password' ? 'bad_password' : 'bad_key');
+      }
+      final totpSecret = cfg['totp'] as Uint8List?;
+      if (totpSecret != null) {
+        final step = await totpVerify(totpSecret, auth['totp'] as String? ?? '');
+        // A code is accepted once: replaying an observed code is refused.
+        if (step == null || _usedTotpSteps.contains(step)) {
+          _recordFailure(ip);
+          return reject(step == null ? 'bad_totp' : 'totp_reused');
+        }
+        _usedTotpSteps.add(step);
+        _usedTotpSteps.removeWhere((s) => s < step - 4);
       }
       Uint8List? newKey;
       if (auth['pair'] == true && mode == 'password') {
