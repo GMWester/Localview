@@ -2,6 +2,7 @@
 
 ## 1.9.1
 
+- **Android, Android Pro, Android TV and Android XR / Quest builds are back**: they were missing from 1.9.0 because the new sound player didn't build on Android. Everything listed under 1.9.0 for Android (sound from Android devices, Localview Pro) arrives with this version.
 - **Localview Pro: the sound moves off the Android device** (Android 12+): when you switch the sound to your device while Localview Pro's helper is running, the helper records the device's whole sound output directly. Android then plays it only through Localview, so the device's speaker is silent without touching its volume, and apps that block normal capture (some streaming apps) come through as well. Restart the helper once after updating (*⋮ → ADB (wireless debugging)… → Start real mouse & keyboard*). Without the helper, or on Android 10–11, the 1.9.0 behaviour stays: the sound is copied and the device's media volume is turned down while it plays on your device.
 
 ## 1.9.0
