@@ -9,7 +9,9 @@ import 'discovery.dart';
 import 'host.dart';
 import 'platform/android.dart';
 import 'platform/drives.dart';
+import 'platform/gamepad_host.dart';
 import 'platform/platform.dart';
+import 'stream/rtc.dart';
 import 'storage.dart';
 import 'upnp.dart';
 
@@ -27,6 +29,10 @@ class AppController extends ChangeNotifier {
   final DriveMounter drives = DriveMounter();
   final Map<String, String> mountedDrives = {}; // key -> location text
   bool isTv = false;
+
+  /// Virtual controllers for game streaming (desktop hosts).
+  VirtualPads? pads;
+  final Map<int, RtcHostSession> _rtc = {};
   bool upnpBusy = false;
   List<String> localIps = [];
   String? hostWarning;
@@ -37,10 +43,11 @@ class AppController extends ChangeNotifier {
         isTv = await AndroidBridge.isTv();
       } catch (_) {}
     }
+    pads = Platform.isAndroid || Platform.isIOS ? null : createVirtualPads();
     host = HostService(
       store,
       externalCapture: Platform.isAndroid ? AndroidBridge.grab : null,
-      injector: Platform.isAndroid ? AndroidInjector() : createDesktopInjector(),
+      injector: Platform.isAndroid ? AndroidInjector() : GamepadInjector(createDesktopInjector(), pads!),
     )
       ..onClipboardSet = ((t) {
         Clipboard.setData(ClipboardData(text: t));
@@ -50,6 +57,14 @@ class AppController extends ChangeNotifier {
         await mountDrive('host-$sid', name, url, volume);
       })
       ..onUnmount = ((sid) => unmountDrive('host-$sid'));
+    host
+      ..rtcCapable = rtcHostSupported && await rtcUsable()
+      ..padsCapable = pads != null
+      ..onRtc = ((sid, m) {
+        final r = _rtc.putIfAbsent(sid, () => RtcHostSession((x) => host.sendRtc(sid, x)));
+        unawaited(r.handle(m));
+      })
+      ..onSessionEnded = ((sid) => unawaited(_rtc.remove(sid)?.stop()));
     host.addListener(notifyListeners);
     if (Platform.isLinux && (Platform.environment['XDG_SESSION_TYPE'] ?? '') == 'wayland') {
       hostWarning = 'Wayland session detected: screen capture only works in an X11 (Xorg) session.';
@@ -119,6 +134,10 @@ class AppController extends ChangeNotifier {
     await drives.unmountAll();
     _responder?.stop();
     scanner?.dispose();
+    for (final r in _rtc.values) {
+      await r.stop();
+    }
+    pads?.dispose();
     await host.stop();
   }
 }

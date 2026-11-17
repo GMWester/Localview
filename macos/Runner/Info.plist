@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Game mode can stream sound from a loopback audio device (for example BlackHole) to your other devices.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Localview does not use the camera; this is required by the streaming engine.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Localview finds and connects to your other devices on this network.</string>
 	<key>NSAppleEventsUsageDescription</key>

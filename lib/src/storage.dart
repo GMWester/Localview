@@ -99,6 +99,15 @@ class AppStore extends ChangeNotifier {
   /// Appearance: 'system', 'light', 'dark' or 'oled' (pure black for OLED screens).
   String theme = 'system';
 
+  /// Game mode (WebRTC hardware video + audio) when the host supports it.
+  bool gameMode = true;
+  int gamePreset = 1; // index into GameModeSettings.presets
+  bool showStreamStats = false;
+
+  /// VR theater (Android XR) screen size and surroundings.
+  String theaterSize = 'medium';
+  String theaterEnvironment = 'void';
+
   /// Root directory shared (null = whole filesystem / all drives on Windows).
   String? fsRoot;
   final List<PairedDevice> paired = [];
@@ -170,6 +179,11 @@ class AppStore extends ChangeNotifier {
     maxFps = j['maxFps'] as int? ?? 30;
     shareFiles = j['shareFiles'] as bool? ?? true;
     theme = j['theme'] as String? ?? 'system';
+    gameMode = j['gameMode'] as bool? ?? true;
+    gamePreset = j['gamePreset'] as int? ?? 1;
+    showStreamStats = j['showStreamStats'] as bool? ?? false;
+    theaterSize = j['theaterSize'] as String? ?? 'medium';
+    theaterEnvironment = j['theaterEnvironment'] as String? ?? 'void';
     mountDrives = j['mountDrives'] as bool? ?? true;
     paired
       ..clear()
@@ -190,6 +204,11 @@ class AppStore extends ChangeNotifier {
         'maxFps': maxFps,
         'shareFiles': shareFiles,
         'theme': theme,
+        'gameMode': gameMode,
+        'gamePreset': gamePreset,
+        'showStreamStats': showStreamStats,
+        'theaterSize': theaterSize,
+        'theaterEnvironment': theaterEnvironment,
         'mountDrives': mountDrives,
         'paired': paired.map((p) => p.toJson()).toList(),
       };
