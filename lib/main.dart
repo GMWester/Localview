@@ -4,16 +4,30 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'src/app_controller.dart';
+import 'src/background.dart';
 import 'src/config.dart';
 import 'src/files.dart';
 import 'src/storage.dart';
 import 'src/ui/home_page.dart';
 import 'src/ui/theme.dart';
+import 'src/ui/viewer_home.dart';
+import 'src/viewer_window.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await AppStore.load();
+  // Extra window opened by another Localview window: only show that device / monitor.
+  final viewer = await takeViewerLaunch();
+  if (viewer != null) {
+    store.readOnly = true;
+    final app = AppController(store);
+    await app.initViewer();
+    runApp(LocalviewApp(app: app, viewer: viewer));
+    return;
+  }
   store.fsRoot = await _defaultFsRoot();
+  // Already running (maybe hidden in the background): bring that window back instead.
+  if (await showRunningInstance()) exit(0);
   final app = AppController(store);
   await app.init();
   runApp(LocalviewApp(app: app));
@@ -27,8 +41,9 @@ Future<String?> _defaultFsRoot() async {
 }
 
 class LocalviewApp extends StatelessWidget {
-  const LocalviewApp({super.key, required this.app});
+  const LocalviewApp({super.key, required this.app, this.viewer});
   final AppController app;
+  final ViewerLaunch? viewer;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +54,7 @@ class LocalviewApp extends StatelessWidget {
         final t = app.store.theme;
         setAnimationsEnabled(app.store.animations);
         return MaterialApp(
-          title: 'Localview $kModeLabel',
+          title: viewer == null ? 'Localview $kModeLabel' : '${viewer!.title} - Localview',
           debugShowCheckedModeBanner: false,
           scrollBehavior: const LocalviewScrollBehavior(),
           theme: applyAnimationPreference(buildTheme(seed, Brightness.light)),
@@ -52,7 +67,7 @@ class LocalviewApp extends StatelessWidget {
             'dark' || 'oled' => ThemeMode.dark,
             _ => ThemeMode.system,
           },
-          home: HomePage(app: app),
+          home: viewer == null ? HomePage(app: app) : ViewerHome(app: app, launch: viewer!),
         );
       },
     );
