@@ -161,9 +161,9 @@ class TunnelClient extends _Ends {
   Future<Map<String, dynamic>> adbInfo() {
     final c = _info ??= Completer<Map<String, dynamic>>();
     unawaited(send(Uint8List.fromList([TunnelMsg.adbInfoRequest])));
-    return c.future.timeout(const Duration(seconds: 10), onTimeout: () {
+    return c.future.timeout(const Duration(seconds: 14), onTimeout: () {
       _info = null;
-      return {'allowed': false, 'err': 'timeout'};
+      return {'err': 'timeout'};
     });
   }
 
