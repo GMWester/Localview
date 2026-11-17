@@ -12,6 +12,7 @@ import '../protocol.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../platform/theater.dart';
+import '../stream/pcvr.dart';
 import '../stream/rtc.dart';
 import 'files_page.dart';
 import 'gamepad.dart';
@@ -47,6 +48,11 @@ class _RemotePageState extends State<RemotePage> {
   bool _theater = false;
   bool _xr = false;
 
+  // PC VR (SteamVR streaming to this headset).
+  bool _pcvrAvailable = false;
+  PcvrClient? _pcvr;
+  RtcClient? _vrAudio;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +69,11 @@ class _RemotePageState extends State<RemotePage> {
     if (s.peerRtc && widget.app.store.gameMode) {
       rtcUsable().then((ok) {
         if (ok && mounted) _startGameMode();
+      });
+    }
+    if (s.peerVr) {
+      PcvrClient.available().then((v) {
+        if (mounted) setState(() => _pcvrAvailable = v);
       });
     }
     Theater.xrAvailable().then((v) {
@@ -109,6 +120,58 @@ class _RemotePageState extends State<RemotePage> {
         r.stop();
       }
     });
+  }
+
+  Future<void> _startPcvr() async {
+    final st = widget.app.store;
+    final mbps = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          const ListTile(
+            title: Text('Play SteamVR games'),
+            subtitle: Text('SteamVR starts on the PC and streams to this headset with head and controller tracking. '
+                'Use 5 GHz/6 GHz Wi-Fi or a wired PC connection. Hold the left menu button for 3 seconds to leave.'),
+          ),
+          for (final b in const [50, 100, 150, 200])
+            ListTile(
+              leading: Icon(st.vrBitrate == b ? Icons.radio_button_checked : Icons.radio_button_off),
+              title: Text('$b Mbps${b == 150 ? ' (recommended)' : b == 50 ? ' (weak Wi-Fi)' : ''}'),
+              onTap: () => Navigator.pop(ctx, b),
+            ),
+        ]),
+      ),
+    );
+    if (mbps == null) return;
+    st.vrBitrate = mbps;
+    await st.save();
+    // Game audio rides the existing game-mode channel (audio only); video goes through SteamVR.
+    if (_rtc != null) await _stopGameMode();
+    if (s.peerRtc && await rtcUsable()) {
+      final a = RtcClient(s.send);
+      _vrAudio = a;
+      s.onRtc = (m) => a.handle(m);
+      await a.start(const GameModeSettings(video: false, fps: 30, bitrateKbps: 1000));
+    }
+    final c = PcvrClient(host: s.params.host, send: s.send, bitrateMbps: mbps);
+    _pcvr = c;
+    s.onVr = (m) => c.handle(m);
+    c.events.listen((e) {
+      if (!mounted) return;
+      _snack(e);
+      if (!c.active) _endPcvr();
+    });
+    await c.start();
+  }
+
+  Future<void> _endPcvr() async {
+    _pcvr?.stop();
+    _pcvr = null;
+    s.onVr = null;
+    final a = _vrAudio;
+    _vrAudio = null;
+    await a?.dispose();
+    if (s.peerRtc && widget.app.store.gameMode && mounted) await _startGameMode();
   }
 
   Future<void> _stopGameMode() async {
@@ -218,6 +281,8 @@ class _RemotePageState extends State<RemotePage> {
   void dispose() {
     s.removeListener(_onSession);
     _pads?.dispose();
+    _pcvr?.stop();
+    _vrAudio?.dispose();
     final r = _rtc;
     _rtc = null;
     r?.dispose();
@@ -459,6 +524,14 @@ class _RemotePageState extends State<RemotePage> {
                     icon: const Icon(Icons.sports_esports_outlined),
                     selectedIcon: const Icon(Icons.sports_esports),
                     onPressed: _gameModeOptions,
+                  ),
+                if (_pcvrAvailable)
+                  IconButton(
+                    tooltip: 'Play SteamVR games (PC VR)',
+                    isSelected: _pcvr != null,
+                    icon: const Icon(Icons.view_in_ar_outlined),
+                    selectedIcon: const Icon(Icons.view_in_ar),
+                    onPressed: _pcvr == null ? _startPcvr : _endPcvr,
                   ),
                 if (touchDevice && _pads != null)
                   IconButton(

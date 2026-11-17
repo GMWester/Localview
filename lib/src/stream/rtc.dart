@@ -13,18 +13,20 @@ import '../protocol.dart';
 
 /// Streaming quality requested by the controller.
 class GameModeSettings {
-  const GameModeSettings({this.fps = 60, this.bitrateKbps = 20000, this.maxHeight = 1080, this.audio = true});
+  const GameModeSettings({this.fps = 60, this.bitrateKbps = 20000, this.maxHeight = 1080, this.audio = true, this.video = true});
   final int fps;
   final int bitrateKbps;
   final int maxHeight; // 0 = native
   final bool audio;
+  final bool video;
 
-  Map<String, Object?> toJson() => {'fps': fps, 'bitrate': bitrateKbps, 'height': maxHeight, 'audio': audio};
+  Map<String, Object?> toJson() => {'fps': fps, 'bitrate': bitrateKbps, 'height': maxHeight, 'audio': audio, 'video': video};
   factory GameModeSettings.fromJson(Map<String, dynamic> j) => GameModeSettings(
         fps: (j['fps'] as int? ?? 60).clamp(15, 144),
         bitrateKbps: (j['bitrate'] as int? ?? 20000).clamp(1000, 150000),
         maxHeight: j['height'] as int? ?? 1080,
         audio: j['audio'] as bool? ?? true,
+        video: j['video'] as bool? ?? true,
       );
 
   static const presets = <(String, GameModeSettings)>[
@@ -116,6 +118,17 @@ class RtcHostSession {
 
     final vt = _screen!.getVideoTracks();
     if (vt.isEmpty) throw StateError('screen capture produced no video');
+    if (s.video) await _addVideo(pc, vt.first, s);
+    await _addAudio(pc, s);
+    final offer = await pc.createOffer({});
+    await pc.setLocalDescription(offer);
+    send(jsonMsg(Msg.rtcOffer, {'sdp': offer.sdp, 'type': offer.type, 'audio': _audioCount > 0, 'video': s.video}));
+  }
+
+  int _audioCount = 0;
+
+  Future<void> _addVideo(RTCPeerConnection pc, MediaStreamTrack track, GameModeSettings s) async {
+    final vt = [track];
     final vTrans = await pc.addTransceiver(
       track: vt.first,
       kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
@@ -137,7 +150,9 @@ class RtcHostSession {
     } catch (e) {
       debugPrint('encoder parameters not applied: $e');
     }
+  }
 
+  Future<void> _addAudio(RTCPeerConnection pc, GameModeSettings s) async {
     final audioTracks = <MediaStreamTrack>[..._screen!.getAudioTracks()];
     if (s.audio && audioTracks.isEmpty) {
       // macOS (and fallback): use a loopback input device such as BlackHole if present.
@@ -162,10 +177,7 @@ class RtcHostSession {
         init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendOnly, streams: [_screen!]),
       );
     }
-
-    final offer = await pc.createOffer({});
-    await pc.setLocalDescription(offer);
-    send(jsonMsg(Msg.rtcOffer, {'sdp': offer.sdp, 'type': offer.type, 'audio': audioTracks.isNotEmpty}));
+    _audioCount = audioTracks.length;
   }
 
   static Future<String?> _loopbackInput() async {
