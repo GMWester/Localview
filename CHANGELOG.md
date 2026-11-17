@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.0
+
+- **Localview Pro for Android** (new `android-pro` release files): the Android app plus a small helper that runs with adb *shell* privileges, so a computer controlling the phone or tablet sends **real mouse and keyboard events**: hover, real left / right / middle clicks, the real scroll wheel, keyboard shortcuts and real key presses (also in games), instead of simulated touches. Start it from the computer through ADB over Localview: *⋮ → ADB (wireless debugging)… → Start real mouse & keyboard* (needed again after each restart of the device). The helper only answers the Localview app on that device. The regular Android build is unchanged.
+
 ## 1.8.0
 
 - **Live touch when controlling Android** (Android 8+): pressing the mouse button puts the finger down immediately, it follows the pointer while you hold it and lifts on release. Previously a drag was only replayed after you let go (at the speed you dragged), which made scrolling and swiping on a phone lag by up to a couple of seconds. Holding the button is now a real long-press. Android 7 keeps the previous behaviour.

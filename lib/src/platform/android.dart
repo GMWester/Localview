@@ -15,9 +15,20 @@ import '../files.dart';
 const MethodChannel androidChannel = MethodChannel('localview/android');
 
 class AndroidBridge {
+  /// Localview Pro: {pro: build has the helper, running, command: shell command that starts it}.
+  static Future<Map<String, Object?>> proStatus() async =>
+      (await androidChannel.invokeMapMethod<String, Object?>('pro.status')) ?? const {'pro': false};
+
   /// ADB over Localview: developer options / wireless debugging state and this device's adb ports.
   static Future<Map<String, Object?>> adbStatus() async {
     final m = (await androidChannel.invokeMapMethod<String, Object?>('adbStatus')) ?? {};
+    try {
+      final pro = await proStatus();
+      if (pro['pro'] == true) {
+        m['proCommand'] = pro['command'];
+        m['proRunning'] = pro['running'] == true;
+      }
+    } catch (_) {}
     // Classic `adb tcpip`: check whether adbd really listens there.
     final legacy = m['legacy'] as int?;
     if (legacy != null) {
@@ -114,6 +125,65 @@ class AndroidInjector implements InputInjector {
   AndroidInjector() {
     // Live touch needs Android 8+ and the accessibility service; checked again later if it was off.
     _checkLive();
+    _checkPro();
+  }
+
+  // Localview Pro: real mouse & keyboard events through the shell helper, when it is running.
+  bool _proBuild = false;
+  bool _pro = false;
+  Timer? _proTimer;
+  bool _proMovePending = false;
+  Timer? _proMoveTimer;
+
+  void _checkPro() {
+    AndroidBridge.proStatus().then((st) {
+      _proBuild = st['pro'] == true;
+      _pro = st['running'] == true;
+      if (_proBuild) _proTimer ??= Timer.periodic(const Duration(seconds: 5), (_) => _checkPro());
+    }).catchError((_) {});
+  }
+
+  void _pc(String m, Map<String, Object?> a) {
+    androidChannel.invokeMethod<bool>(m, a).then((ok) {
+      if (ok == false && m != 'pro.key') _pro = false; // helper gone: back to touch until it is started again
+    }).catchError((_) {
+      _pro = false;
+    });
+  }
+
+  /// Real mouse & keyboard. Returns true if [e] was handled.
+  bool _injectPro(InputEvent e) {
+    switch (e) {
+      case PointerMove(:final x, :final y):
+        _x = x;
+        _y = y;
+        _proMovePending = true;
+        _proMoveTimer ??= Timer(const Duration(milliseconds: 8), () {
+          _proMoveTimer = null;
+          if (_proMovePending) {
+            _proMovePending = false;
+            _pc('pro.move', {'x': _x, 'y': _y});
+          }
+        });
+        return true;
+      case PointerButton(:final button, :final down):
+        _proMovePending = false;
+        _pc('pro.button', {'button': button, 'down': down, 'x': _x, 'y': _y});
+        return true;
+      case Scroll(:final dx, :final dy):
+        _pc('pro.scroll', {'x': _x, 'y': _y, 'dx': dx, 'dy': dy});
+        return true;
+      case KeyInput(:final hid, :final down):
+        _pc('pro.key', {'hid': hid, 'down': down});
+        return true;
+      case TextEntry(:final text):
+        androidChannel.invokeMethod<bool>('pro.text', {'text': text}).then((ok) {
+          if (ok != true) _call('text', {'text': text}); // not on the virtual keyboard: accessibility
+        }).catchError((_) => _call('text', {'text': text}));
+        return true;
+      default:
+        return false;
+    }
   }
 
   void _checkLive() {
@@ -128,6 +198,7 @@ class AndroidInjector implements InputInjector {
 
   @override
   void inject(InputEvent e, {MonitorInfo? monitor}) {
+    if (_pro && !_liveDown && _injectPro(e)) return;
     switch (e) {
       case PointerMove(:final x, :final y):
         _x = x;

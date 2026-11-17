@@ -117,6 +117,8 @@ open class MainActivity : FlutterActivity() {
         ch.setMethodCallHandler { call, result ->
             @Suppress("UNCHECKED_CAST")
             if (XrBridge.handle(this, call.method, call.arguments as? Map<String, Any?>, result)) return@setMethodCallHandler
+            @Suppress("UNCHECKED_CAST")
+            if (ProBridge.handle(this, call.method, call.arguments as? Map<String, Any?>, result)) return@setMethodCallHandler
             val a11y = LocalviewAccessibilityService.instance
             fun d(k: String) = (call.argument<Number>(k) ?: 0.0).toDouble()
             when (call.method) {
