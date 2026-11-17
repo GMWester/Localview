@@ -3,6 +3,7 @@
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mftransform.h>
+#include <strmif.h>
 #include <wrl/client.h>
 
 #include <atomic>
