@@ -13,20 +13,29 @@ import '../protocol.dart';
 
 /// Streaming quality requested by the controller.
 class GameModeSettings {
-  const GameModeSettings({this.fps = 60, this.bitrateKbps = 20000, this.maxHeight = 1080, this.audio = true, this.video = true});
+  const GameModeSettings(
+      {this.fps = 60, this.bitrateKbps = 20000, this.maxHeight = 1080, this.audio = true, this.video = true, this.monitor});
   final int fps;
+
+  /// Which of the host's screens to stream (MonitorInfo.osIndex); null = the first one.
+  final int? monitor;
+
+  GameModeSettings onMonitor(int? m) =>
+      GameModeSettings(fps: fps, bitrateKbps: bitrateKbps, maxHeight: maxHeight, audio: audio, video: video, monitor: m);
   final int bitrateKbps;
   final int maxHeight; // 0 = native
   final bool audio;
   final bool video;
 
-  Map<String, Object?> toJson() => {'fps': fps, 'bitrate': bitrateKbps, 'height': maxHeight, 'audio': audio, 'video': video};
+  Map<String, Object?> toJson() =>
+      {'fps': fps, 'bitrate': bitrateKbps, 'height': maxHeight, 'audio': audio, 'video': video, 'monitor': ?monitor};
   factory GameModeSettings.fromJson(Map<String, dynamic> j) => GameModeSettings(
         fps: (j['fps'] as int? ?? 60).clamp(15, 144),
         bitrateKbps: (j['bitrate'] as int? ?? 20000).clamp(1000, 150000),
         maxHeight: j['height'] as int? ?? 1080,
         audio: j['audio'] as bool? ?? true,
         video: j['video'] as bool? ?? true,
+        monitor: j['monitor'] as int?,
       );
 
   static const presets = <(String, GameModeSettings)>[
@@ -102,7 +111,8 @@ class RtcHostSession {
     await stop();
     final sources = await desktopCapturer.getSources(types: [SourceType.Screen]);
     final video = <String, dynamic>{
-      if (sources.isNotEmpty) 'deviceId': {'exact': sources.first.id},
+      if (sources.isNotEmpty)
+        'deviceId': {'exact': (s.monitor != null && s.monitor! < sources.length ? sources[s.monitor!] : sources.first).id},
       'mandatory': {'frameRate': s.fps.toDouble()},
     };
     // Windows/Linux: system audio loopback comes with the screen capture.

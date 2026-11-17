@@ -12,6 +12,7 @@ import 'crypto.dart';
 import 'files.dart';
 import 'link.dart';
 import 'net.dart';
+import 'platform/platform.dart';
 import 'protocol.dart';
 
 String describeError(String code) => switch (code) {
@@ -26,6 +27,7 @@ String describeError(String code) => switch (code) {
       'bad_totp' => 'Wrong authenticator code. Check that the clock on both devices is right.',
       'totp_reused' => 'That authenticator code was already used. Wait for the next code.',
       'totp_cancelled' => 'Connection cancelled.',
+      'bad_ticket' => 'This window\'s access expired. Connect again from the main Localview window.',
       _ => code,
     };
 
@@ -45,6 +47,9 @@ class ConnectParams {
     this.scale = 1.0,
     this.fps = 30,
     this.video = true,
+    this.ticketId,
+    this.ticketKey,
+    this.monitor,
   });
   final String host;
   final int port;
@@ -60,7 +65,17 @@ class ConnectParams {
   final int fps;
   final bool video;
 
+  /// Session ticket from an earlier connection (extra windows): no password / authenticator code needed.
+  final String? ticketId;
+  final Uint8List? ticketKey;
+
+  /// Monitor to show first (MonitorInfo.id).
+  final String? monitor;
+
   Map<String, Object?> toMap() => {
+        'ticketId': ticketId,
+        'ticketKey': ticketKey,
+        'monitor': monitor,
         'host': host,
         'port': port,
         'password': password,
@@ -104,8 +119,24 @@ class ClientSession extends ChangeNotifier {
   /// WebRTC signaling from the host (game mode).
   void Function(Uint8List msg)? onRtc;
   Uint8List? newPairKey;
+
+  /// Lets extra windows open more views of this device without logging in again.
+  String? ticketId;
+  Uint8List? ticketKey;
   int screenW = 0, screenH = 0;
   final ValueNotifier<ui.Image?> image = ValueNotifier(null);
+
+  /// The host's monitors (empty for single-screen hosts such as phones) and the one shown.
+  List<MonitorInfo> monitors = const [];
+  String? monitorId;
+  MonitorInfo? get monitor => pickMonitor(monitors, monitorId);
+
+  /// Shows another monitor of the host.
+  void selectMonitor(String id) {
+    monitorId = id;
+    send(jsonMsg(Msg.selectMonitor, {'id': id}));
+    notifyListeners();
+  }
   String? mountUrl, mountVolume;
   void Function(String)? onClipboard;
   Future<void> Function(String url, String volume)? onMount;
@@ -153,9 +184,17 @@ class ClientSession extends ChangeNotifier {
         peerPads = j['pads'] == true;
         peerVr = j['vr'] == true;
         newPairKey = j['pairKey'] as Uint8List?;
+        ticketId = j['ticketId'] as String?;
+        ticketKey = j['ticketKey'] as Uint8List?;
+        monitorId ??= params.monitor;
         connected = true;
         status = 'Connected';
         if (!_handshake.isCompleted) _handshake.complete();
+        notifyListeners();
+      case 'monitors':
+        final j = (m[1] as Map).cast<String, Object?>();
+        monitors = [for (final x in (j['list'] as List? ?? const [])) MonitorInfo.fromJson(x as Map)];
+        monitorId = j['current'] as String? ?? monitorId;
         notifyListeners();
       case 'screen':
         screenW = m[1] as int;
@@ -319,11 +358,13 @@ Future<void> _clientIsolateMain(List args) async {
     sock = FramedSocket(raw);
     final eph = await EphemeralKeys.create();
     final nonceC = randomBytes(16);
-    final usePassword = p['password'] != null;
+    final useTicket = p['ticketId'] != null && p['ticketKey'] != null;
+    final usePassword = !useTicket && p['password'] != null;
     sock.send(utf8.encode(jsonEncode({
       't': 'hello',
       'v': kProtocolVersion,
-      'mode': usePassword ? 'password' : 'paired',
+      'mode': useTicket ? 'ticket' : (usePassword ? 'password' : 'paired'),
+      if (useTicket) 'tid': p['ticketId'],
       'id': p['myId'],
       'name': p['myName'],
       'os': p['os'],
@@ -335,7 +376,9 @@ Future<void> _clientIsolateMain(List args) async {
     if (ack['t'] != 'hello_ack') throw _Remote('protocol');
     if (p['expectedId'] != null && ack['id'] != p['expectedId']) throw _Remote('wrong_device');
     Uint8List secret;
-    if (usePassword) {
+    if (useTicket) {
+      secret = p['ticketKey'] as Uint8List;
+    } else if (usePassword) {
       toMain.send(['status', 'Verifying password…']);
       secret = await derivePasswordKey(p['password'] as String, base64Decode(ack['salt'] as String));
     } else {
@@ -346,7 +389,7 @@ Future<void> _clientIsolateMain(List args) async {
         await deriveSessionKeys(ecdh: ecdh, secret: secret, nonceClient: nonceC, nonceHost: base64Decode(ack['nonce'] as String));
     ch = SecureChannel(sendKey: keys.c2h, recvKey: keys.h2c, isClient: true);
     String? totpCode;
-    if (ack['totp'] == true) {
+    if (ack['totp'] == true && !useTicket) {
       toMain.send(['status', 'Waiting for the authenticator code…']);
       totpWaiter = Completer<String?>();
       toMain.send(['needTotp']);
@@ -358,6 +401,7 @@ Future<void> _clientIsolateMain(List args) async {
       'pair': p['wantPair'] == true,
       'share': p['share'] == true,
       'totp': ?totpCode,
+      'monitor': ?p['monitor'],
     }))));
     final wraw = await sock.next(timeout: const Duration(seconds: 20));
     Map welcome;
@@ -383,6 +427,8 @@ Future<void> _clientIsolateMain(List args) async {
         'pads': welcome['pads'] == true,
         'vr': welcome['vr'] == true,
         if (welcome['pairKey'] != null) 'pairKey': base64Decode(welcome['pairKey'] as String),
+        if (welcome['ticket'] is Map) 'ticketId': (welcome['ticket'] as Map)['id'],
+        if (welcome['ticket'] is Map) 'ticketKey': base64Decode((welcome['ticket'] as Map)['key'] as String),
       }
     ]);
     await sendMsg(jsonMsg(Msg.streamSettings, {'scale': p['scale'], 'fps': p['fps'], 'video': p['video']}));
@@ -407,6 +453,8 @@ Future<void> _clientIsolateMain(List args) async {
           case Msg.screenInfo:
             final j = jsonBody(m);
             toMain.send(['screen', j['w'], j['h']]);
+          case Msg.monitors:
+            toMain.send(['monitors', jsonBody(m)]);
           case Msg.clipboard:
             toMain.send(['clip', textBody(m)]);
           case Msg.bye:

@@ -62,6 +62,10 @@ String? get androidAbiSuffix => switch (Abi.current()) {
       _ => null,
     };
 
+/// Matches a release file `<stem>-<version><ext>` (1.3.1 and later) or `<stem><ext>` (older releases).
+RegExp _named(String stem, String ext) =>
+    RegExp('^${RegExp.escape(stem)}(-[0-9]+(\\.[0-9]+)*)?${RegExp.escape(ext)}\$');
+
 /// Release files for this build, best match first.
 List<RegExp> assetPatternsForThisBuild() {
   if (Platform.isAndroid) {
@@ -69,15 +73,15 @@ List<RegExp> assetPatternsForThisBuild() {
     final f = kFlavor.isEmpty ? 'android' : kFlavor;
     final abi = androidAbiSuffix;
     return [
-      if (abi != null) RegExp('^${RegExp.escape('Localview-$l-$f-$abi.apk')}\$'),
-      RegExp('^${RegExp.escape('Localview-$l-$f.apk')}\$'),
+      if (abi != null) _named('Localview-$l-$f-$abi', '.apk'),
+      _named('Localview-$l-$f', '.apk'),
     ];
   }
   final p = assetPatternForThisBuild();
   return [
     ?p,
     // Windows on ARM can also run the x64 build (emulated) if no ARM64 file exists.
-    if (Platform.isWindows && _arm64) RegExp('^${RegExp.escape('Localview-$_variantLabel-windows-x64-setup.exe')}\$'),
+    if (Platform.isWindows && _arm64) _named('Localview-$_variantLabel-windows-x64-setup', '.exe'),
   ];
 }
 
@@ -86,20 +90,20 @@ RegExp? assetPatternForThisBuild() {
   final l = _variantLabel;
   final arch = _arm64 ? 'arm64' : 'x64';
   String e(String s) => RegExp.escape(s);
-  if (Platform.isWindows) return RegExp('^${e('Localview-$l-windows-$arch-setup.exe')}\$');
-  if (Platform.isMacOS) return RegExp('^${e('Localview-$l-macos.dmg')}\$');
-  if (Platform.isIOS) return RegExp('^${e('Localview-$l-ios-unsigned.ipa')}\$');
+  if (Platform.isWindows) return _named('Localview-$l-windows-$arch-setup', '.exe');
+  if (Platform.isMacOS) return _named('Localview-$l-macos', '.dmg');
+  if (Platform.isIOS) return _named('Localview-$l-ios-unsigned', '.ipa');
   if (Platform.isAndroid) {
     final f = kFlavor.isEmpty ? 'android' : kFlavor;
-    return RegExp('^${e('Localview-$l-$f.apk')}\$');
+    return _named('Localview-$l-$f', '.apk');
   }
   if (Platform.isLinux) {
     final plat = kFlavor == 'steamos' ? 'steamos' : 'linux';
     return switch (linuxInstall) {
-      LinuxInstall.appImage => RegExp('^${e('Localview-$l-$plat-$arch.AppImage')}\$'),
+      LinuxInstall.appImage => _named('Localview-$l-$plat-$arch', '.AppImage'),
       LinuxInstall.deb => RegExp('^${e('localview-${kModeName}_')}.+_${_arm64 ? 'arm64' : 'amd64'}\\.deb\$'),
       LinuxInstall.rpm => RegExp('^${e('localview-$kModeName-')}.+\\.${_arm64 ? 'aarch64' : 'x86_64'}\\.rpm\$'),
-      LinuxInstall.archive => RegExp('^${e('Localview-$l-$plat-$arch.tar.gz')}\$'),
+      LinuxInstall.archive => _named('Localview-$l-$plat-$arch', '.tar.gz'),
     };
   }
   return null;

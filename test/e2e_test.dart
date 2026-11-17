@@ -13,7 +13,7 @@ import 'package:localview/src/storage.dart';
 class _Rec implements InputInjector {
   final events = <InputEvent>[];
   @override
-  void inject(InputEvent e) => events.add(e);
+  void inject(InputEvent e, {MonitorInfo? monitor}) => events.add(e);
 }
 
 void main() {
