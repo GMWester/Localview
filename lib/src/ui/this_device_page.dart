@@ -392,6 +392,15 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
             ]),
           ),
           const _UpdatesCard(),
+          if (!Platform.isIOS)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.power_settings_new),
+                label: const Text('Quit Localview'),
+                onPressed: () => _quit(context, app),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(8),
             child: Text('Localview $kModeLabel $kAppVersion · end-to-end encrypted (X25519 + ChaCha20-Poly1305)',
@@ -532,4 +541,31 @@ class _UpdatesCardState extends State<_UpdatesCard> {
       ),
     );
   }
+}
+
+/// Quits Localview completely (instead of keeping it in the background), after confirming
+/// when that ends connections or remote access.
+Future<void> _quit(BuildContext context, AppController app) async {
+  final n = app.clients.length;
+  final hosting = app.store.hostEnabled && kCanHost;
+  if (n > 0 || hosting) {
+    final what = [
+      if (n > 0) 'disconnects $n device${n == 1 ? '' : 's'} and their drives',
+      if (hosting) 'this device can no longer be reached until you open Localview again',
+    ].join('; ');
+    final ok = await showDialog<bool>(
+      animationStyle: dialogAnimation(),
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Quit Localview?'),
+        content: Text('Quitting $what.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Quit')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+  }
+  await app.quit();
 }
