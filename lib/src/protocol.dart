@@ -19,6 +19,28 @@ abstract final class Msg {
   static const clipboard = 0x30;
   static const clipboardRequest = 0x32;
   static const bye = 0x3F;
+
+  // Game mode (WebRTC hardware video + audio). Signaling travels inside the
+  // encrypted session, so the DTLS fingerprints are authenticated end to end.
+  static const rtcRequest = 0x50;
+  static const rtcOffer = 0x51;
+  static const rtcAnswer = 0x52;
+  static const rtcIce = 0x53;
+  static const rtcStop = 0x54;
+  static const rtcError = 0x55;
+
+  /// Gamepad state: [type][pad][u16 buttons][u8 lt][u8 rt][i16 lx][i16 ly][i16 rx][i16 ry] (XInput layout).
+  static const gamepad = 0x60;
+
+  static bool isRtc(int t) => t >= 0x50 && t <= 0x5F;
+}
+
+/// XInput button bits.
+abstract final class PadBtn {
+  static const dpadUp = 0x0001, dpadDown = 0x0002, dpadLeft = 0x0004, dpadRight = 0x0008;
+  static const start = 0x0010, back = 0x0020, leftThumb = 0x0040, rightThumb = 0x0080;
+  static const leftShoulder = 0x0100, rightShoulder = 0x0200, guide = 0x0400;
+  static const a = 0x1000, b = 0x2000, x = 0x4000, y = 0x8000;
 }
 
 /// Mouse buttons.
@@ -110,6 +132,8 @@ sealed class InputEvent {
         return TextEntry(textBody(m));
       case Msg.special when m.length >= 2:
         return SpecialAction(m[1]);
+      case Msg.gamepad when m.length >= 14:
+        return PadState(m[1] & 3, b.getUint16(2), m[4], m[5], b.getInt16(6), b.getInt16(8), b.getInt16(10), b.getInt16(12));
     }
     return null;
   }
@@ -123,6 +147,7 @@ sealed class InputEvent {
         2 => Scroll(l[1] as double, l[2] as double),
         3 => KeyInput(l[1] as int, l[2] as bool),
         4 => TextEntry(l[1] as String),
+        6 => PadState(l[1] as int, l[2] as int, l[3] as int, l[4] as int, l[5] as int, l[6] as int, l[7] as int, l[8] as int),
         _ => SpecialAction(l[1] as int),
       };
 }
@@ -166,6 +191,29 @@ class TextEntry extends InputEvent {
   final String text;
   @override
   List<Object> toList() => [4, text];
+}
+
+/// Full state of one virtual Xbox-style controller.
+class PadState extends InputEvent {
+  const PadState(this.pad, this.buttons, this.lt, this.rt, this.lx, this.ly, this.rx, this.ry);
+  final int pad, buttons, lt, rt, lx, ly, rx, ry;
+
+  Uint8List encode() {
+    final b = ByteData(14)
+      ..setUint8(0, Msg.gamepad)
+      ..setUint8(1, pad)
+      ..setUint16(2, buttons)
+      ..setUint8(4, lt)
+      ..setUint8(5, rt)
+      ..setInt16(6, lx)
+      ..setInt16(8, ly)
+      ..setInt16(10, rx)
+      ..setInt16(12, ry);
+    return b.buffer.asUint8List();
+  }
+
+  @override
+  List<Object> toList() => [6, pad, buttons, lt, rt, lx, ly, rx, ry];
 }
 
 class SpecialAction extends InputEvent {
