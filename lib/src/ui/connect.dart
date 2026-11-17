@@ -4,6 +4,7 @@ import '../app_controller.dart';
 import '../client.dart';
 import '../config.dart';
 import '../storage.dart';
+import '../viewer_window.dart';
 import 'remote_page.dart';
 import 'two_factor.dart';
 import 'theme.dart';
@@ -19,6 +20,7 @@ Future<ClientSession?> connectTo(
   bool pair = false,
   bool open = true,
   bool viaLan = false,
+  bool newWindow = false,
 }) async {
   final s = app.store;
   final key = 'client-${DateTime.now().microsecondsSinceEpoch}';
@@ -31,9 +33,9 @@ Future<ClientSession?> connectTo(
     wantPair: pair,
     myId: s.deviceId,
     myName: s.deviceName,
-    share: s.shareFiles,
+    share: s.shareFiles && !newWindow,
     fsRoot: s.fsRoot,
-    mount: s.mountDrives,
+    mount: s.mountDrives && !newWindow,
     scale: s.streamScale,
     fps: s.maxFps,
   );
@@ -89,6 +91,22 @@ Future<ClientSession?> connectTo(
       if (session.peerPublicIp != null) paired.address = session.peerPublicIp!;
     }
     await s.save();
+  }
+  app.trackClient(session);
+  if (newWindow) {
+    // Logged in here (password / key / authenticator code); the new window uses the session ticket.
+    final ok = session.ticketId != null &&
+        await openViewerWindow(ViewerLaunch(
+          host: host,
+          port: port,
+          ticketId: session.ticketId!,
+          ticketKey: session.ticketKey!,
+          deviceName: session.peerName,
+          deviceId: session.peerId,
+        ));
+    await session.close();
+    if (!ok) messenger.showSnackBar(const SnackBar(content: Text('Could not open a new window.')));
+    return null;
   }
   if (open && context.mounted) {
     await nav.push(MaterialPageRoute<void>(builder: (_) => RemotePage(app: app, session: session!)));
