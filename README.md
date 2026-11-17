@@ -1,6 +1,6 @@
-# Localview — Android
+# Localview — Android (Pro)
 
-> **This branch:** the Android phone/tablet app (`android/`). Pushing here builds LAN, WAN and Combined APKs and adds them, with installers, to the release of the current version (`v<version>` from pubspec.yaml).
+> **This branch:** **Localview Pro** for Android phones and tablets: the regular Android app plus a small helper that runs with adb shell privileges, so computers controlling the device send **real mouse and keyboard events** (hover, right-click, wheel, shortcuts) instead of simulated touches. Start the helper from a computer connected with Localview: ⋮ → ADB (wireless debugging)… → Start real mouse & keyboard (again after each restart of the device).
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
