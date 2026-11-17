@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.2
+
+- **Install adb from Localview**: the ADB dialog (*⋮ → ADB (wireless debugging)…*) has an **Install adb** button on Windows, macOS and Linux that downloads Google's Android SDK Platform-Tools into Localview's own folder, so you no longer have to install adb yourself before pairing or starting Localview Pro's real mouse & keyboard.
+- **Fixed: "does not allow ADB over Localview yet" although it was allowed**: when the Android device took long to look up its wireless-debugging ports (some devices never finish, especially while the pairing code is shown), the computer gave up and wrongly reported ADB as not allowed. The device now always answers within a few seconds (and reads the port directly where Android allows it), the computer waits longer, and a late answer shows "did not answer in time – Refresh" instead.
+
 ## 1.9.1
 
 - **Android, Android Pro, Android TV and Android XR / Quest builds are back**: they were missing from 1.9.0 because the new sound player didn't build on Android. Everything listed under 1.9.0 for Android (sound from Android devices, Localview Pro) arrives with this version.
