@@ -230,9 +230,9 @@ class GamepadInjector implements InputInjector {
   };
 
   @override
-  void inject(InputEvent e) {
+  void inject(InputEvent e, {MonitorInfo? monitor}) {
     if (e is! PadState) {
-      base?.inject(e);
+      base?.inject(e, monitor: monitor);
       return;
     }
     if (pads.available) {

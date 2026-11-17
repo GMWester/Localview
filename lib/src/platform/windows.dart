@@ -33,6 +33,47 @@ final _deleteDC = _gdi32.lookupFunction<Int32 Function(IntPtr), int Function(int
 final _bitBlt = _gdi32.lookupFunction<Int32 Function(IntPtr, Int32, Int32, Int32, Int32, IntPtr, Int32, Int32, Uint32),
     int Function(int, int, int, int, int, int, int, int, int)>('BitBlt');
 
+final _enumDisplayMonitors = _user32.lookupFunction<
+    Int32 Function(IntPtr, Pointer<Void>, Pointer<NativeFunction<Int32 Function(IntPtr, IntPtr, Pointer<Int32>, IntPtr)>>, IntPtr),
+    int Function(int, Pointer<Void>, Pointer<NativeFunction<Int32 Function(IntPtr, IntPtr, Pointer<Int32>, IntPtr)>>, int)>(
+  'EnumDisplayMonitors',
+);
+final _getMonitorInfo =
+    _user32.lookupFunction<Int32 Function(IntPtr, Pointer<Uint8>), int Function(int, Pointer<Uint8>)>('GetMonitorInfoW');
+
+final List<int> _enumerated = [];
+int _onMonitor(int hMonitor, int hdc, Pointer<Int32> rect, int data) {
+  _enumerated.add(hMonitor);
+  return 1;
+}
+
+/// Monitors in EnumDisplayMonitors order (physical pixels; the app is per-monitor DPI aware).
+List<MonitorInfo> winMonitors() {
+  _enumerated.clear();
+  _enumDisplayMonitors(0, nullptr, Pointer.fromFunction<Int32 Function(IntPtr, IntPtr, Pointer<Int32>, IntPtr)>(_onMonitor, 0), 0);
+  final out = <MonitorInfo>[];
+  final mi = calloc<Uint8>(104); // MONITORINFOEXW
+  try {
+    for (var i = 0; i < _enumerated.length; i++) {
+      final l = mi.asTypedList(104)..fillRange(0, 104, 0);
+      final b = ByteData.sublistView(l)..setUint32(0, 104, Endian.little);
+      if (_getMonitorInfo(_enumerated[i], mi) == 0) continue;
+      final left = b.getInt32(4, Endian.little), top = b.getInt32(8, Endian.little);
+      final right = b.getInt32(12, Endian.little), bottom = b.getInt32(16, Endian.little);
+      final primary = b.getUint32(36, Endian.little) & 1 == 1;
+      final dev = String.fromCharCodes(l.buffer.asUint16List(l.offsetInBytes + 40, 32).takeWhile((c) => c != 0));
+      final n = RegExp(r'(\d+)$').firstMatch(dev)?.group(1) ?? '${i + 1}';
+      out.add(MonitorInfo(dev.isEmpty ? 'mon$i' : dev, 'Display $n', left, top, right - left, bottom - top,
+          primary: primary, osIndex: i));
+    }
+  } finally {
+    calloc.free(mi);
+  }
+  final vx = _getSystemMetrics(76), vy = _getSystemMetrics(77), vw = _getSystemMetrics(78), vh = _getSystemMetrics(79);
+  if (vw > 0 && vh > 0) out.add(MonitorInfo(MonitorInfo.allId, 'All displays', vx, vy, vw, vh));
+  return out;
+}
+
 const _srccopy = 0x00CC0020;
 const _captureblt = 0x40000000;
 
@@ -75,16 +116,17 @@ class WinCapturer implements ScreenCapturer {
   }
 
   @override
-  RawFrame? capture() {
-    final w = _getSystemMetrics(0), h = _getSystemMetrics(1);
+  RawFrame? capture({MonitorInfo? monitor}) {
+    final ox = monitor?.x ?? 0, oy = monitor?.y ?? 0;
+    final w = monitor?.w ?? _getSystemMetrics(0), h = monitor?.h ?? _getSystemMetrics(1);
     if (w <= 0 || h <= 0) return null;
     _ensure(w, h);
-    if (_bitBlt(_memDC, 0, 0, w, h, _screenDC, 0, 0, _srccopy | _captureblt) == 0) return null;
-    _drawCursor();
+    if (_bitBlt(_memDC, 0, 0, w, h, _screenDC, ox, oy, _srccopy | _captureblt) == 0) return null;
+    _drawCursor(ox, oy);
     return RawFrame(w, h, w * 4, _bits.asTypedList(w * h * 4), PixelFmt.bgra);
   }
 
-  void _drawCursor() {
+  void _drawCursor(int ox, int oy) {
     final ci = _ci.asTypedList(32);
     ci.fillRange(0, 32, 0);
     ByteData.sublistView(ci).setUint32(0, 24, Endian.little); // cbSize (x64)
@@ -102,7 +144,7 @@ class WinCapturer implements ScreenCapturer {
       if (mask != 0) _deleteObject(mask);
       if (color != 0) _deleteObject(color);
     }
-    _drawIconEx(_memDC, x, y, hCursor, 0, 0, 0, 0, 3 /* DI_NORMAL */);
+    _drawIconEx(_memDC, x - ox, y - oy, hCursor, 0, 0, 0, 0, 3 /* DI_NORMAL */);
   }
 
   @override
@@ -147,10 +189,19 @@ class WinInjector implements InputInjector {
   }
 
   @override
-  void inject(InputEvent e) {
+  void inject(InputEvent e, {MonitorInfo? monitor}) {
     switch (e) {
       case PointerMove(:final x, :final y):
-        _mouse((x * 65535).round(), (y * 65535).round(), 0, 0x0001 | 0x8000);
+        if (monitor == null) {
+          _mouse((x * 65535).round(), (y * 65535).round(), 0, 0x0001 | 0x8000);
+        } else {
+          // Absolute position on the virtual desktop (all monitors).
+          final vx = _getSystemMetrics(76), vy = _getSystemMetrics(77);
+          final vw = _getSystemMetrics(78), vh = _getSystemMetrics(79);
+          final px = monitor.x + x.clamp(0.0, 1.0) * (monitor.w - 1), py = monitor.y + y.clamp(0.0, 1.0) * (monitor.h - 1);
+          _mouse(((px - vx) * 65535 / (vw > 1 ? vw - 1 : 1)).round(), ((py - vy) * 65535 / (vh > 1 ? vh - 1 : 1)).round(), 0,
+              0x0001 | 0x8000 | 0x4000 /* MOVE | ABSOLUTE | VIRTUALDESK */);
+        }
       case PointerButton(:final button, :final down):
         final f = switch (button) {
           Btn.right => down ? 0x0008 : 0x0010,

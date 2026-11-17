@@ -10,7 +10,7 @@ final bool kHasWan = kModeName != 'lan';
 String get kModeLabel => switch (kModeName) { 'wan' => 'WAN', 'combined' => 'LAN + WAN', _ => 'LAN' };
 
 /// Set by CI from pubspec.yaml (--dart-define=LV_VERSION=...).
-const String kAppVersion = String.fromEnvironment('LV_VERSION', defaultValue: '1.3.0');
+const String kAppVersion = String.fromEnvironment('LV_VERSION', defaultValue: '1.4.0');
 const int kProtocolVersion = 1;
 
 /// LAN and WAN variants use different ports so both can run on one machine.
