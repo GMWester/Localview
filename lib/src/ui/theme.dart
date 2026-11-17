@@ -1,7 +1,65 @@
+import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// Global switch for UI animations (This device → Appearance).
+/// Global switch for UI animations (This device → Appearance). Change it with [setAnimationsEnabled].
 bool animationsEnabled = true;
+
+/// How much faster than real time animations run while they are off: every built-in
+/// animation (switches, dropdown and popup menus, segmented buttons, tab and
+/// navigation indicators, snack bars, tooltips…) then finishes in its first frame.
+const double _instant = 1e-4;
+
+/// Turns all UI animations on or off. Widgets that offer no way to switch their own
+/// animation off (e.g. Switch, DropdownButton) are covered by speeding up the animation
+/// clock; scrolling keeps its normal feel ([LocalviewScrollBehavior]).
+void setAnimationsEnabled(bool on) {
+  animationsEnabled = on;
+  final dilation = on ? 1.0 : _instant;
+  if (timeDilation != dilation) timeDilation = dilation;
+}
+
+/// Runs a scroll fling in real time even while the animation clock is sped up.
+class _RealTimeSimulation extends Simulation {
+  _RealTimeSimulation(this.inner, this.scale);
+  final Simulation inner;
+  final double scale;
+  @override
+  double x(double time) => inner.x(time * scale);
+  @override
+  double dx(double time) => inner.dx(time * scale) * scale;
+  @override
+  bool isDone(double time) => inner.isDone(time * scale);
+}
+
+class _RealTimeScrollPhysics extends ScrollPhysics {
+  const _RealTimeScrollPhysics({super.parent});
+  @override
+  _RealTimeScrollPhysics applyTo(ScrollPhysics? ancestor) => _RealTimeScrollPhysics(parent: buildParent(ancestor));
+  @override
+  Simulation? createBallisticSimulation(ScrollMetrics position, double velocity) {
+    final sim = super.createBallisticSimulation(position, velocity);
+    return sim == null || timeDilation == 1.0 ? sim : _RealTimeSimulation(sim, timeDilation);
+  }
+}
+
+/// App-wide scroll behaviour: normal fling physics whether or not animations are on.
+class LocalviewScrollBehavior extends MaterialScrollBehavior {
+  const LocalviewScrollBehavior();
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      _RealTimeScrollPhysics(parent: super.getScrollPhysics(context));
+}
+
+/// Loading spinner that stays still when animations are off (a spinning indicator
+/// would otherwise race on the sped-up clock).
+Widget busyIndicator({double? strokeWidth, double? size}) {
+  if (!animationsEnabled) return Icon(Icons.hourglass_top, size: size);
+  return strokeWidth == null ? const CircularProgressIndicator() : CircularProgressIndicator(strokeWidth: strokeWidth);
+}
+
+/// Progress bar; without a known [value] it shows a still bar when animations are off.
+Widget progressBar(double? value) =>
+    LinearProgressIndicator(value: value ?? (animationsEnabled ? null : 0.0));
 
 /// Animation style for dialogs and sheets (null = default animation).
 AnimationStyle? dialogAnimation() => animationsEnabled ? null : AnimationStyle.noAnimation;

@@ -1,10 +1,13 @@
 #pragma once
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 #include <openvr_driver.h>
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 
 #include "vrproto.h"
@@ -15,7 +18,10 @@ inline void LvLog(const char* fmt, ...) {
   va_start(ap, fmt);
   vsnprintf(buf, sizeof buf, fmt, ap);
   va_end(ap);
+#ifndef LV_NO_STEAMVR
   if (vr::VRDriverLog()) vr::VRDriverLog()->Log((std::string("[localview] ") + buf).c_str());
+#endif
+  if (getenv("LOCALVIEW_VR_STDERR")) fprintf(stderr, "[localview] %s\n", buf);
 }
 
 // Headset pose -> OpenVR driver pose.

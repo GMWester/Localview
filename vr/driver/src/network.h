@@ -1,6 +1,17 @@
 #pragma once
+#ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+using LvSocket = SOCKET;
+constexpr LvSocket kNoSocket = INVALID_SOCKET;
+using LvSockLen = int;
+#else
+#include <netinet/in.h>
+#include <sys/socket.h>
+using LvSocket = int;
+constexpr LvSocket kNoSocket = -1;
+using LvSockLen = socklen_t;
+#endif
 
 #include <atomic>
 #include <functional>
@@ -21,13 +32,13 @@ class Network {
 
  private:
   void Loop();
-  SOCKET sock_ = INVALID_SOCKET;
+  LvSocket sock_ = kNoSocket;
   lvvr::SecureLink link_;
   Handler handler_;
   std::thread thread_;
   std::atomic<bool> running_{false};
   std::mutex peerMutex_;
   sockaddr_storage peer_ = {};
-  int peerLen_ = 0;
+  LvSockLen peerLen_ = 0;
   std::atomic<bool> hasPeer_{false};
 };
