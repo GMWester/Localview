@@ -16,6 +16,8 @@ import 'stream/pcvr.dart';
 import 'stream/rtc.dart';
 import 'storage.dart';
 import 'upnp.dart';
+import 'background.dart';
+import 'client.dart';
 
 /// Owns long-lived services: hosting, discovery responder, UPnP, drive mounts.
 class AppController extends ChangeNotifier {
@@ -32,12 +34,39 @@ class AppController extends ChangeNotifier {
   final Map<String, String> mountedDrives = {}; // key -> location text
   bool isTv = false;
 
+  /// Open connections to other devices (they stay open while the window is closed).
+  final Set<ClientSession> clients = {};
+  late final BackgroundKeeper background = BackgroundKeeper(this);
+
+  void trackClient(ClientSession s) {
+    if (s.closed || !clients.add(s)) return;
+    void onChange() {
+      if (s.closed) {
+        s.removeListener(onChange);
+        clients.remove(s);
+        notifyListeners();
+      }
+    }
+
+    s.addListener(onChange);
+    notifyListeners();
+  }
+
   /// Virtual controllers for game streaming (desktop hosts).
   VirtualPads? pads;
   final Map<int, RtcHostSession> _rtc = {};
   bool upnpBusy = false;
   List<String> localIps = [];
   String? hostWarning;
+
+  /// Viewer windows: no hosting, discovery or drives - just what the remote view needs.
+  Future<void> initViewer() async {
+    if (Platform.isAndroid) {
+      try {
+        isTv = await AndroidBridge.isTv();
+      } catch (_) {}
+    }
+  }
 
   Future<void> init() async {
     if (Platform.isAndroid) {
@@ -78,6 +107,7 @@ class AppController extends ChangeNotifier {
     }
     localIps = await localAddresses();
     if (kCanHost && store.hostEnabled) await startHosting();
+    await background.start();
     _responder = DiscoveryResponder(() => store.hostEnabled && host.running
         ? {
             'id': store.deviceId,

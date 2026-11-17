@@ -133,7 +133,8 @@ class HostService extends ChangeNotifier {
         notifyListeners();
       case 'input':
         try {
-          injector?.inject(InputEvent.fromList(m[1] as List<Object?>));
+          final mon = m.length > 2 && m[2] != null ? MonitorInfo.fromJson(m[2] as Map) : null;
+          injector?.inject(InputEvent.fromList(m[1] as List<Object?>), monitor: mon);
         } catch (e) {
           debugPrint('inject failed: $e');
         }
@@ -215,6 +216,10 @@ class _HostIsolate {
   final Map<String, List<DateTime>> _failures = {};
   final Set<int> _usedTotpSteps = {};
 
+  /// Session tickets: extra windows of an authenticated viewer connect with these instead of
+  /// the password / authenticator code. In memory only; cleared when the login settings change.
+  final Map<String, ({Uint8List key, String peerId, bool viaPairKey, DateTime expires})> _tickets = {};
+
   Future<void> run() async {
     rx.listen((m) => _onMain(m as List));
     String? err;
@@ -234,7 +239,12 @@ class _HostIsolate {
   void _onMain(List m) {
     switch (m[0]) {
       case 'config':
+        final old = cfg;
         cfg = (m[1] as Map).cast<String, Object?>();
+        if (!listEquals(old['verifier'] as Uint8List?, cfg['verifier'] as Uint8List?) ||
+            !listEquals(old['totp'] as Uint8List?, cfg['totp'] as Uint8List?)) {
+          _tickets.clear();
+        }
         if (cfg['enabled'] != true) _kickAll();
         for (final s in _sessions.values) {
           s.revalidate();
@@ -270,7 +280,7 @@ class _HostIsolate {
     }
   }
 
-  Future<RawFrame?> grab() async {
+  Future<RawFrame?> grab([MonitorInfo? monitor]) async {
     if (externalCapture) {
       final id = _nextGrab++;
       final c = Completer<RawFrame?>();
@@ -282,7 +292,7 @@ class _HostIsolate {
       });
     }
     _capturer ??= createScreenCapturer();
-    return _capturer?.capture();
+    return _capturer?.capture(monitor: monitor);
   }
 
   Future<String> clipboardGet() {
@@ -324,6 +334,14 @@ class _HostIsolate {
         if (v == null) return reject('no_password');
         secret = v;
         salt = cfg['salt'] as Uint8List;
+      } else if (mode == 'ticket') {
+        _tickets.removeWhere((_, t) => t.expires.isBefore(DateTime.now()));
+        final t = _tickets[hello['tid'] as String? ?? ''];
+        if (t == null || t.peerId != peerId) {
+          _recordFailure(ip);
+          return reject('bad_ticket');
+        }
+        secret = t.key;
       } else if (mode == 'paired') {
         final t = (cfg['trusted'] as List).cast<Map>().where((t) => t['id'] == peerId).toList();
         if (t.isEmpty) return reject('not_paired');
@@ -355,10 +373,12 @@ class _HostIsolate {
         if (auth['t'] != 'auth') throw const DecryptError();
       } on DecryptError {
         _recordFailure(ip);
-        return reject(mode == 'password' ? 'bad_password' : 'bad_key');
+        return reject(switch (mode) { 'password' => 'bad_password', 'ticket' => 'bad_ticket', _ => 'bad_key' });
       }
+      final ticket = mode == 'ticket' ? _tickets[hello['tid'] as String] : null;
       final totpSecret = cfg['totp'] as Uint8List?;
-      if (totpSecret != null) {
+      // A ticket was issued after a full login (including the authenticator code).
+      if (totpSecret != null && ticket == null) {
         final step = await totpVerify(totpSecret, auth['totp'] as String? ?? '');
         // A code is accepted once: replaying an observed code is refused.
         if (step == null || _usedTotpSteps.contains(step)) {
@@ -377,7 +397,15 @@ class _HostIsolate {
         ]);
       }
       final sid = _nextSession++;
-      final session = _HostSession(this, sid, sock, ch, peerId, mode == 'paired');
+      final viaPairKey = ticket?.viaPairKey ?? mode == 'paired';
+      final session = _HostSession(this, sid, sock, ch, peerId, viaPairKey);
+      session._monitorId = auth['monitor'] as String?;
+      String? tid = mode == 'ticket' ? hello['tid'] as String : null;
+      if (tid == null) {
+        tid = base64UrlEncode(randomBytes(16));
+        _tickets[tid] = (key: randomBytes(32), peerId: peerId, viaPairKey: viaPairKey, expires: DateTime.now().add(const Duration(hours: 12)));
+      }
+      final issued = _tickets[tid]!;
       session.files = FileLink(send: session.sendMsg, root: cfg['fsRoot'] as String?, share: cfg['share'] == true);
       _sessions[sid] = session;
       await session.sendMsg(jsonMsg(0x00, {
@@ -392,6 +420,7 @@ class _HostIsolate {
         if (cfg['publicIp'] != null) 'publicIp': cfg['publicIp'],
         'port': cfg['port'],
         if (newKey != null) 'pairKey': base64Encode(newKey),
+        'ticket': {'id': tid, 'key': base64Encode(issued.key)},
       }).sublist(1));
       toMain.send(['session+', sid, hello['name'] ?? 'Device', hello['os'] ?? '', ip]);
       if (auth['share'] == true && cfg['mount'] == true) {
@@ -433,6 +462,24 @@ class _HostSession {
   late int fps = (host.cfg['fps'] as int?) ?? 30;
   Completer<void>? _ackWaiter;
 
+  /// Monitors of this host and the one this viewer watches (each viewer chooses its own).
+  List<MonitorInfo> _monitors = const [];
+  String? _monitorId;
+  MonitorInfo? get _monitor => pickMonitor(_monitors, _monitorId);
+  DateTime _monitorsAt = DateTime(0);
+
+  Future<void> _refreshMonitors({bool force = false}) async {
+    if (host.externalCapture) return;
+    final now = DateTime.now();
+    if (!force && now.difference(_monitorsAt) < const Duration(seconds: 3)) return;
+    _monitorsAt = now;
+    final l = listMonitors();
+    if (!force && listEquals(l, _monitors)) return;
+    _monitors = l;
+    if (l.isEmpty) return;
+    await sendMsg(jsonMsg(Msg.monitors, {'list': [for (final m in l) m.toJson()], 'current': _monitor?.id}));
+  }
+
   Future<void> sendMsg(Uint8List m) {
     return _sendChain = _sendChain.then((_) async {
       if (_closed) return;
@@ -455,6 +502,7 @@ class _HostSession {
   }
 
   Future<void> run() async {
+    await _refreshMonitors(force: true);
     unawaited(_frameLoop());
     try {
       while (!_closed) {
@@ -470,6 +518,10 @@ class _HostSession {
             w?.complete();
           case Msg.refresh:
             encoder.reset();
+          case Msg.selectMonitor:
+            _monitorId = jsonBody(m)['id'] as String?;
+            encoder.reset();
+            await _refreshMonitors(force: true);
           case Msg.streamSettings:
             final j = jsonBody(m);
             scale = ((j['scale'] as num?)?.toDouble() ?? scale).clamp(0.25, 1.0);
@@ -487,7 +539,7 @@ class _HostSession {
             host.toMain.send(['rtc', id, m]);
           default:
             final e = InputEvent.decode(m);
-            if (e != null) host.toMain.send(['input', e.toList()]);
+            if (e != null) host.toMain.send(['input', e.toList(), _monitor?.toJson()]);
         }
       }
     } catch (_) {
@@ -520,7 +572,8 @@ class _HostSession {
       final gap = idleFrames > 30 ? (minGap < 200 ? 200 : minGap) : minGap;
       if (elapsed < gap) await Future<void>.delayed(Duration(milliseconds: gap - elapsed));
       sw.reset();
-      final f = await host.grab();
+      await _refreshMonitors();
+      final f = await host.grab(_monitor);
       if (_closed) break;
       if (f == null) {
         await Future<void>.delayed(const Duration(milliseconds: 250));

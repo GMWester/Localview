@@ -7,6 +7,7 @@ import '../storage.dart';
 import 'connect.dart';
 import 'home_page.dart';
 import 'theme.dart';
+import '../viewer_window.dart';
 
 class DevicesPage extends StatelessWidget {
   const DevicesPage({super.key, required this.app});
@@ -40,11 +41,12 @@ class _LanDevices extends StatefulWidget {
 class _LanDevicesState extends State<_LanDevices> {
   DiscoveryScanner get scanner => widget.app.scanner!;
 
-  Future<void> _open(LanDevice d) async {
+  Future<void> _open(LanDevice d, {bool newWindow = false}) async {
     final paired = widget.app.store.findPaired(d.id);
     if (kIsCombined && paired != null) {
       // Already in "My devices": the stored pairing key is enough.
-      await connectTo(context, widget.app, host: d.address, port: d.port, paired: paired, viaLan: true);
+      await connectTo(context, widget.app,
+          host: d.address, port: d.port, paired: paired, viaLan: true, newWindow: newWindow);
       return;
     }
     if (!d.hasPassword) {
@@ -56,7 +58,8 @@ class _LanDevicesState extends State<_LanDevices> {
     final pw = await askPassword(context, d.name);
     if (pw == null || pw.isEmpty || !mounted) return;
     // Combined builds also pair, so the device is reachable from anywhere afterwards.
-    await connectTo(context, widget.app, host: d.address, port: d.port, password: pw, pair: kIsCombined, viaLan: true);
+    await connectTo(context, widget.app,
+        host: d.address, port: d.port, password: pw, pair: kIsCombined, viaLan: true, newWindow: newWindow);
   }
 
   @override
@@ -94,6 +97,12 @@ class _LanDevicesState extends State<_LanDevices> {
                       const Tooltip(message: 'Two-factor authentication', child: Icon(Icons.verified_user_outlined)),
                     const SizedBox(width: 8),
                     Icon(kIsCombined && widget.app.store.findPaired(d.id) != null ? Icons.key : Icons.lock_outline),
+                    if (canOpenViewerWindows && !widget.app.isTv)
+                      IconButton(
+                        tooltip: 'Open in a new window',
+                        icon: const Icon(Icons.open_in_new),
+                        onPressed: () => _open(d, newWindow: true),
+                      ),
                   ]),
                   onTap: () => _open(d),
                 ),
@@ -248,6 +257,14 @@ class _PairedTile extends StatelessWidget {
       trailing: PopupMenuButton<String>(
         onSelected: (v) async {
           switch (v) {
+            case 'window':
+              final near = app.scanner?.devices[d.id];
+              await connectTo(context, app,
+                  host: near?.address ?? d.address,
+                  port: near?.port ?? d.port,
+                  paired: d,
+                  viaLan: near != null,
+                  newWindow: true);
             case 'edit':
               await _edit(context);
             case 'allow':
@@ -258,6 +275,7 @@ class _PairedTile extends StatelessWidget {
           }
         },
         itemBuilder: (_) => [
+          if (canOpenViewerWindows && !app.isTv) const PopupMenuItem(value: 'window', child: Text('Open in a new window')),
           const PopupMenuItem(value: 'edit', child: Text('Edit address')),
           CheckedPopupMenuItem(value: 'allow', checked: d.allowIncoming, child: const Text('Allow it to control this device')),
           const PopupMenuItem(value: 'remove', child: Text('Remove (deletes the key)')),
