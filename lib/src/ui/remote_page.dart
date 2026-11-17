@@ -19,6 +19,7 @@ import 'gamepad.dart';
 import 'theme.dart';
 import '../platform/platform.dart';
 import '../viewer_window.dart';
+import 'adb_dialog.dart';
 
 class RemotePage extends StatefulWidget {
   const RemotePage({super.key, required this.app, required this.session});
@@ -637,6 +638,8 @@ class _RemotePageState extends State<RemotePage> {
                         }
                       case 'hide':
                         setState(() => _toolbar = false);
+                      case 'adb':
+                        await showAdbDialog(context, s);
                     }
                   },
                   itemBuilder: (_) => [
@@ -649,6 +652,7 @@ class _RemotePageState extends State<RemotePage> {
                     const PopupMenuItem(value: 'taskmgr', child: Text('Ctrl + Shift + Esc')),
                     const PopupMenuItem(value: 'esc', child: Text('Esc')),
                     const PopupMenuItem(value: 'refresh', child: Text('Refresh screen')),
+                    if (s.peerAdb) const PopupMenuItem(value: 'adb', child: Text('ADB (wireless debugging)…')),
                     if (s.peerRtc)
                       PopupMenuItem(value: 'gameOff', child: Text(_rtc != null ? 'Switch to compatibility mode' : 'Switch to game mode')),
                     CheckedPopupMenuItem(value: 'stats', checked: widget.app.store.showStreamStats, child: const Text('Show stream stats')),
