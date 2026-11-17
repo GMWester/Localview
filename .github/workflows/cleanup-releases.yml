@@ -1,0 +1,26 @@
+name: Remove superseded releases
+
+# Runs only on the development branch (platform branches don't carry this file).
+on:
+  push:
+    branches: [claude/eloquent-darwin-2m7gti]
+    paths: [.github/workflows/cleanup-releases.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KEEP: v1.1.0
+      REMOVE: v1.0.0
+    steps:
+      - name: Delete the old release once its replacement is complete
+        run: |
+          n=$(gh release view "$KEEP" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets | length' 2>/dev/null || echo 0)
+          echo "$KEEP has $n files"
+          if [ "$n" -lt 54 ]; then echo "::error::$KEEP is not complete yet; not deleting $REMOVE"; exit 1; fi
+          gh release delete "$REMOVE" --cleanup-tag -y --repo "$GITHUB_REPOSITORY" || echo "$REMOVE already gone"
