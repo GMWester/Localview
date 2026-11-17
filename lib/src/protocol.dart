@@ -7,6 +7,8 @@ abstract final class Msg {
   static const pong = 0x02;
   static const screenInfo = 0x10;
   static const frame = 0x11;
+  /// Host -> viewer: {list: [MonitorInfo json], current: id}
+  static const monitors = 0x12;
   static const pointerMove = 0x20;
   static const pointerButton = 0x21;
   static const scroll = 0x22;
@@ -16,6 +18,8 @@ abstract final class Msg {
   static const frameAck = 0x26;
   static const streamSettings = 0x27;
   static const refresh = 0x28;
+  /// Viewer -> host: {id} (MonitorInfo.id; 'all' = whole desktop)
+  static const selectMonitor = 0x29;
   static const clipboard = 0x30;
   static const clipboardRequest = 0x32;
   static const bye = 0x3F;

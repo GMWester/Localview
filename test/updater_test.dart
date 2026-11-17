@@ -15,6 +15,11 @@ void main() {
     expect(p.hasMatch('Localview-WAN-linux-x64.tar.gz'), isFalse);
     expect(p.hasMatch('Localview-LAN-steamos-x64.tar.gz'), isFalse);
     expect(p.hasMatch('Localview-LAN-linux-arm64.tar.gz'), isFalse);
+    // From 1.3.1 on, file names end with the version.
+    expect(p.hasMatch('Localview-LAN-linux-x64-1.3.1.tar.gz'), isTrue);
+    expect(p.hasMatch('Localview-LAN-linux-x64-12.0.tar.gz'), isTrue);
+    expect(p.hasMatch('Localview-LAN-linux-arm64-1.3.1.tar.gz'), isFalse);
+    expect(p.hasMatch('Localview-LAN-linux-x64-beta.tar.gz'), isFalse);
   });
 
   test("what's new is taken from the release notes", () {
