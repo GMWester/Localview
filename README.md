@@ -9,10 +9,10 @@ Every platform has its own branch, and every branch publishes into **one release
 | Windows 10/11 | [`main`](../../tree/main) | `.exe` setup (Inno Setup, optional controller driver) | `.zip` | ✅ | ✅ |
 | Linux x64 / arm64 | [`linux`](../../tree/linux) | `.deb` | AppImage, `.tar.gz` | ✅ (X11 session) | ✅ |
 | macOS | [`macos`](../../tree/macos) | `.dmg` | `.zip` | ✅ | ✅ |
-| Android | [`android`](../../tree/android) | `.apk` | | ✅ | ✅ |
+| Android 7.0+ (ARMv7 32-bit, ARM64, x86-64) | [`android`](../../tree/android) | `.apk` (all-in-one or per processor) | | ✅ | ✅ |
 | iOS / iPadOS | [`ios`](../../tree/ios) | `.ipa` (sideload) | | ❌ (Apple forbids input injection) | ✅ |
-| Android TV | [`android-tv`](../../tree/android-tv) | `.apk` | | ✅ | ✅ |
-| Android XR & Meta Quest | [`android-xr`](../../tree/android-xr) | `.apk` | | ✅ | ✅ + VR theater |
+| Android TV (ARMv7 — most TVs, ARM64, x86-64) | [`android-tv`](../../tree/android-tv) | `.apk` (all-in-one or per processor) | | ✅ | ✅ |
+| Android XR & Meta Quest (ARM64; ARMv7 for older 32-bit headsets) | [`android-xr`](../../tree/android-xr) | `.apk` (all-in-one or per processor) | | ✅ | ✅ + VR theater, PC VR |
 | SteamOS: Steam Frame (arm64), Steam Deck (x64) | [`steamos`](../../tree/steamos) | AppImage | `.tar.gz` | ✅ (desktop mode) | ✅ + theater |
 
 **Not sure which file to pick?** Use the [Localview Installer](https://github.com/GMWester/LocalViewInstaller/releases/latest): choose your device, processor and LAN/WAN/Combined, and it downloads and installs the matching build.
@@ -81,6 +81,14 @@ Each connection runs an ephemeral **X25519** key exchange. Session keys are deri
 * the 256-bit pairing key created when the device was added (WAN).
 
 Every message (video, input, clipboard, files) is sealed with **ChaCha20-Poly1305** using per-direction keys and counter nonces, so tampering, replay and reordering break the session. Passwords never leave the device they were set on: other devices only ever prove knowledge of them through the key exchange. The device that set a password keeps it in its owner-only settings file so you can look it up there (This device → Password → eye button) if you forget it. Five wrong passwords lock an IP out for five minutes. Ephemeral keys give forward secrecy.
+
+## Two-factor authentication
+
+*This device → Two-factor authentication → Set up*: scan the QR code with an authenticator app (or tap *Type the code manually* and enter the key), press **Next** and type the 6-digit code it shows. From then on every connection to this device — by password or with a saved pairing key — also asks for the current code (RFC 6238 TOTP, 30-second codes, ±30 s clock tolerance, each code accepted once). Turning it off requires a current code. Nearby devices with 2FA show a shield icon.
+
+## Updates
+
+*This device → Updates* (bottom of the page) checks the latest release and installs the matching build: Windows runs the setup silently and restarts Localview, Android opens the package installer, Linux replaces the AppImage / installs the .deb / unpacks the archive, macOS opens the disk image. iOS can't self-update, so it links to the release.
 
 ## Remote storage as drives
 

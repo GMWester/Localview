@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+- **Two-factor authentication**: protect a device with an authenticator app (Google Authenticator, Microsoft Authenticator, Authy, 1Password, …). Set up by QR code or by typing the key, then confirm with a code. Every connection to that device — including saved/paired devices — then asks for the current code. Codes are checked by the device itself, can't be reused, and wrong codes count toward the lockout.
+- **In-app updates**: *This device → Updates* checks GitHub for a newer version and installs the right file for your platform, processor and variant (silent Windows setup, macOS disk image, Android installer, AppImage/.deb/archive on Linux and SteamOS).
+- **Older & 32-bit Android devices**: besides the all-in-one APK, every Android, Android TV and Android XR / Quest release now has per-processor APKs — ARMv7 (32-bit: older phones, most Android TVs, older headsets), ARM64 and x86-64 (Chromebooks, emulators). Android 7.0 or newer (Android 10+ for the VR build). In-app updates pick the APK for your processor.
+- **Stable Android signing**: with a release key configured in CI, Android accepts in-app updates over the previous version.
+- **Animations switch**: *This device → Appearance → Animations* turns off page transitions, touch ripples and dialog/sheet animations.
+
 ## 1.1.0
 
 - **PC VR**: play SteamVR games on Meta Quest and Android XR headsets (SteamVR driver + native OpenXR client, encrypted UDP, Touch controllers, haptics, game audio).

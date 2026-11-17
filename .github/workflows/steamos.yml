@@ -33,7 +33,7 @@ jobs:
           git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git "$HOME/flutter"
           echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
       - run: flutter config --no-analytics && flutter pub get
-      - run: flutter build linux --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }}
+      - run: flutter build linux --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }} --dart-define=LV_FLAVOR=steamos
       - name: Package (tar.gz, AppImage)
         run: |
           M="${{ matrix.label }}"
@@ -57,7 +57,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: pubspec.yaml
+          sparse-checkout: |
+            pubspec.yaml
+            CHANGELOG.md
           sparse-checkout-cone-mode: false
       - name: Read version from pubspec.yaml
         shell: bash
@@ -85,18 +87,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete steamos-v1.0.0 --cleanup-tag -y --repo "${{ github.repository }}" || true
-      - name: Publish to the shared release
-        id: publish
-        continue-on-error: true
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ env.VERSION }}
-          target_commitish: main
-          name: Localview ${{ env.VERSION }}
-          make_latest: true
-          overwrite_files: true
-          files: dist/*
-          body: |
+      - name: Release notes (changelog section + downloads table)
+        run: |
+          {
+            echo "## What's new in $VERSION"
+            awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md | sed '/^$/d'
+            echo
+            cat <<'NOTES'
             One release for every platform. Pick your device, then a variant:
             
             * **Combined** (recommended): nearby devices are listed automatically and anything you connect to once is saved to *My devices*, reachable from anywhere.
@@ -109,15 +106,30 @@ jobs:
             | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
             | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
             | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
-            | Android phones/tablets | `Localview-<variant>-android.apk` | |
-            | Android TV / Google TV | `Localview-<variant>-android-tv.apk` | |
-            | Android XR & Meta Quest | `Localview-<variant>-android-xr.apk` | |
+            | Android phones/tablets (Android 7.0+) | `Localview-<variant>-android.apk` (all processors) | per processor: `…-android-arm64.apk`, `…-android-armv7.apk` (older 32-bit devices), `…-android-x86_64.apk` |
+            | Android TV / Google TV | `Localview-<variant>-android-tv.apk` (all processors) | per processor: `…-android-tv-armv7.apk` (most TVs), `…-android-tv-arm64.apk`, `…-android-tv-x86_64.apk` |
+            | Android XR & Meta Quest | `Localview-<variant>-android-xr.apk` (all processors) | per processor: `…-android-xr-arm64.apk` (Quest 2/3/3S/Pro, Android XR), `…-android-xr-armv7.apk` (older 32-bit headsets, Android 10+), `…-android-xr-x86_64.apk` (Android XR emulator) |
             | iOS / iPadOS (sideload) | `Localview-<variant>-ios-unsigned.ipa` | |
             
             Everything is end-to-end encrypted (X25519 + ChaCha20-Poly1305; game mode media is DTLS-SRTP keyed through that channel).
             **Game mode** streams Windows/macOS/Linux PCs with hardware H.264 video, system audio and controller passthrough (up to 4K60 / 1080p120).
-
-            Source-Commit: ${{ env.SOURCE_COMMIT }}
+          NOTES
+            echo
+            echo "Source-Commit: $SOURCE_COMMIT"
+          } > release-notes.md
+          cat release-notes.md
+      - name: Publish to the shared release
+        id: publish
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: main
+          name: Localview ${{ env.VERSION }}
+          make_latest: true
+          overwrite_files: true
+          files: dist/*
+          body_path: release-notes.md
       - name: Retry (another platform may have created the release at the same moment)
         if: steps.publish.outcome == 'failure'
         run: sleep 30

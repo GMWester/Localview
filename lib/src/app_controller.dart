@@ -79,7 +79,14 @@ class AppController extends ChangeNotifier {
     localIps = await localAddresses();
     if (kCanHost && store.hostEnabled) await startHosting();
     _responder = DiscoveryResponder(() => store.hostEnabled && host.running
-        ? {'id': store.deviceId, 'name': store.deviceName, 'os': kOsName, 'port': host.boundPort ?? store.tcpPort, 'pw': store.hasPassword}
+        ? {
+            'id': store.deviceId,
+            'name': store.deviceName,
+            'os': kOsName,
+            'port': host.boundPort ?? store.tcpPort,
+            'pw': store.hasPassword,
+            'totp': store.totpEnabled,
+          }
         : null);
     if (kHasLan) {
       await _responder!.start();
