@@ -1,23 +1,41 @@
 # Localview — SteamOS (Steam Frame & Steam Deck)
 
-> **This branch:** the SteamOS build (`linux/`): **arm64 for Steam Frame**, x64 for Steam Deck. Pushing here builds LAN and WAN bundles with an installer script and publishes release `steamos-v1.0.0`. In Game Mode / VR, add Localview as a Non-Steam Game; controllers drive the virtual cursor.
+> **This branch:** the SteamOS build (`linux/`): **arm64 for Steam Frame**, x64 for Steam Deck. Pushing here builds LAN, WAN and Combined bundles with an installer script and adds them, with installers, to the shared release `v1.0.0`. In Game Mode / VR, add Localview as a Non-Steam Game; controllers drive the virtual cursor.
 
 Control your devices from anywhere — a Parsec-style remote desktop app for **Windows, Linux, macOS, Android, iOS, Android TV, Android XR / Meta Quest and SteamOS (Steam Frame / Steam Deck)**, with **end-to-end encryption** and **remote storage mounted as real drives**.
 
-Every platform has its own branch and its own GitHub Release, each with three builds — **LAN**, **WAN** and **Combined** (LAN + WAN in one app):
+Every platform has its own branch, and every branch publishes into **one release** ([Releases → Localview 1.0.0](../../releases/latest)) with three variants — **LAN**, **WAN** and **Combined** (LAN + WAN in one app) — each as an installer and a portable download:
 
-| Platform | Branch | Release | Can be controlled | Can control others |
-|---|---|---|---|---|
-| Windows 10/11 | [`main`](../../tree/main) | `windows-v1.0.0` | ✅ | ✅ |
-| Linux (x64, arm64) | [`linux`](../../tree/linux) | `linux-v1.0.0` | ✅ (X11 session) | ✅ |
-| macOS | [`macos`](../../tree/macos) | `macos-v1.0.0` | ✅ | ✅ |
-| Android | [`android`](../../tree/android) | `android-v1.0.0` | ✅ | ✅ |
-| iOS / iPadOS | [`ios`](../../tree/ios) | `ios-v1.0.0` | ❌ (Apple forbids input injection) | ✅ |
-| Android TV | [`android-tv`](../../tree/android-tv) | `android-tv-v1.0.0` | ✅ | ✅ |
-| Android XR & Meta Quest | [`android-xr`](../../tree/android-xr) | `android-xr-v1.0.0` | ✅ | ✅ |
-| SteamOS (Steam Frame arm64, Steam Deck x64) | [`steamos`](../../tree/steamos) | `steamos-v1.0.0` | ✅ (X11 desktop) | ✅ |
+| Platform | Branch | Installer | Portable | Can be controlled | Can control others |
+|---|---|---|---|---|---|
+| Windows 10/11 | [`main`](../../tree/main) | `.exe` setup (Inno Setup, optional controller driver) | `.zip` | ✅ | ✅ |
+| Linux x64 / arm64 | [`linux`](../../tree/linux) | `.deb` | AppImage, `.tar.gz` | ✅ (X11 session) | ✅ |
+| macOS | [`macos`](../../tree/macos) | `.dmg` | `.zip` | ✅ | ✅ |
+| Android | [`android`](../../tree/android) | `.apk` | | ✅ | ✅ |
+| iOS / iPadOS | [`ios`](../../tree/ios) | `.ipa` (sideload) | | ❌ (Apple forbids input injection) | ✅ |
+| Android TV | [`android-tv`](../../tree/android-tv) | `.apk` | | ✅ | ✅ |
+| Android XR & Meta Quest | [`android-xr`](../../tree/android-xr) | `.apk` | | ✅ | ✅ + VR theater |
+| SteamOS: Steam Frame (arm64), Steam Deck (x64) | [`steamos`](../../tree/steamos) | AppImage | `.tar.gz` | ✅ (desktop mode) | ✅ + theater |
 
-Download from the [Releases page](../../releases). LAN and WAN builds talk to the same variant (LAN↔LAN, WAN↔WAN); **Combined** talks to all three.
+LAN and WAN builds talk to the same variant (LAN↔LAN, WAN↔WAN); **Combined** talks to all three.
+
+## Game & video streaming (Game mode)
+
+When the controlled device is a Windows, macOS or Linux PC, Localview switches to **Game mode** automatically:
+
+* **Hardware video**: H.264 is preferred (GPU encode/decode on almost every device), with VP8/VP9/AV1 fallbacks. Presets go from 720p60 up to **4K60**, **1080p120**, and a native-resolution 90 fps preset for VR headsets (gamepad icon in the session toolbar).
+* **Sound**: PC audio is streamed with the video. On Windows and Linux it is captured automatically (WASAPI / PulseAudio-PipeWire loopback). On macOS, install a loopback device such as [BlackHole](https://existential.audio/blackhole/) and route output to it; Localview picks it up.
+* **Low latency**: real-time transport with congestion control and frame-rate-first degradation. Turn on *Show stream stats* to see resolution, fps, bitrate and round-trip time.
+* **Controllers**: Xbox/PlayStation/Switch Pro controllers, Steam Frame and Quest controllers, and TV gamepads on the device you hold become a **virtual Xbox 360 controller on the PC** — ViGEmBus on Windows (the installer offers it) and uinput on Linux/SteamOS (the `.deb` adds the udev rule). Phones get an **on-screen controller** (gamepad toggle). On macOS hosts, which have no virtual-controller API, buttons are mapped to keys (WASD, Space, Esc…).
+* **Security**: the WebRTC offer/answer travels inside the end-to-end encrypted Localview session, so the DTLS-SRTP media keys are authenticated by your password or pairing key. LAN builds never contact a STUN server; WAN and Combined builds use public STUN servers (Google, Cloudflare) only to discover their public address for NAT traversal.
+* If UDP can't get through (strict firewalls), the session falls back to *compatibility mode* (the encrypted TCP stream) automatically.
+
+## VR: Android XR, Meta Quest, Steam Frame
+
+* **Android XR** (`android-xr` build): **Theater mode** (the VR icon in the session toolbar; headsets open in it automatically) switches to Full Space and turns the app into a big screen in front of you, Virtual-Desktop style. You pick the screen size (1.5 m to a 10 m cinema) and the surroundings (dark void, passthrough of your room, or the system environment) under ⋮ → *Theater size & surroundings*. Headset controllers act as the mouse (ray + trigger) and are forwarded as an Xbox controller in Game mode.
+* **Meta Quest** (Horizon OS): the same build runs as a resizable panel (drag the corners to make it huge). Horizon OS does not let third-party panel apps create their own environment, so the theater there is the fullscreen, toolbar-less view.
+* **Steam Frame / Steam Deck** (`steamos` build): add the AppImage to Steam (*Add a Non-Steam Game*). In the headset, SteamOS shows it on its large virtual screen; Localview's Theater mode goes fullscreen with no toolbar, and Steam Input forwards the Frame/Deck controls as a controller to the PC.
+* **What this is not (yet): PCVR.** Playing SteamVR/OpenXR **VR games** with head tracking (like Virtual Desktop's or ALVR's VR mode) needs a SteamVR driver on the PC plus a native OpenXR renderer on the headset with reprojection. That is a separate, much larger component and is not part of 1.0.0. Flat games, videos and the desktop do stream to the headset today.
 
 ## LAN variant
 
@@ -51,7 +69,7 @@ Each connection runs an ephemeral **X25519** key exchange. Session keys are deri
 * `PBKDF2-SHA256(password, per-device salt, 120 000 iterations)` (LAN, and the first WAN pairing), or
 * the 256-bit pairing key created when the device was added (WAN).
 
-Every message (video, input, clipboard, files) is sealed with **ChaCha20-Poly1305** using per-direction keys and counter nonces, so tampering, replay and reordering break the session. Passwords are never stored, only the salted PBKDF2 verifier. Five wrong passwords lock an IP out for five minutes. Ephemeral keys give forward secrecy.
+Every message (video, input, clipboard, files) is sealed with **ChaCha20-Poly1305** using per-direction keys and counter nonces, so tampering, replay and reordering break the session. Passwords never leave the device they were set on: other devices only ever prove knowledge of them through the key exchange. The device that set a password keeps it in its owner-only settings file so you can look it up there (This device → Password → eye button) if you forget it. Five wrong passwords lock an IP out for five minutes. Ephemeral keys give forward secrecy.
 
 ## Remote storage as drives
 
@@ -79,10 +97,19 @@ The in-app file browser (folder button in the session toolbar) works on every pl
 
 * **Windows** — allow the firewall prompt on first launch.
 * **macOS** — grant *Screen Recording* and *Accessibility* (This device → Permissions). The app is ad-hoc signed: right-click → Open the first time.
-* **Linux / SteamOS** — hosting needs an X11 session (Wayland can't be captured by third-party apps without a portal). Needs `libgtk-3`, `libX11`, `libXtst`, `libXfixes` (present on all mainstream desktops and SteamOS).
+* **Linux / SteamOS** — Game mode needs PulseAudio or PipeWire running (all desktops have it). Hosting needs an X11 session (Wayland can't be captured by third-party apps without a portal). Needs `libgtk-3`, `libX11`, `libXtst`, `libXfixes` (present on all mainstream desktops and SteamOS).
 * **Android / TV / XR** — tap *Start* for screen sharing, enable the *Localview remote input* accessibility service, and allow *All files access* to share storage.
 * **iOS** — unsigned IPA; sideload with AltStore/Sideloadly or sign it with your Apple developer account.
 * APKs are signed with a CI debug key; uninstall before installing a build from a different CI run if Android refuses the update.
+
+## Installing
+
+* **Windows**: run `Localview-<variant>-windows-x64-setup.exe`. It adds Start menu/desktop shortcuts, an optional sign-in auto-start (so the PC is reachable), a firewall rule, and optionally the ViGEmBus controller driver. The `.zip` is the same app without installation.
+* **macOS**: open the `.dmg` and drag Localview to Applications.
+* **Linux**: `sudo apt install ./localview-<variant>_1.0.0_<arch>.deb`, or make the AppImage executable and run it.
+* **SteamOS**: in Desktop Mode, download the AppImage for your device (arm64 for Steam Frame, x64 for Steam Deck), mark it executable, then add it to Steam as a Non-Steam Game.
+* **Android / TV / XR / Quest**: install the APK (allow installs from unknown sources; on TV use Downloader or `adb install`; on Quest use SideQuest or `adb install`).
+* **iOS**: sideload the unsigned IPA with AltStore/Sideloadly or sign it with your developer account.
 
 ## Building from source
 
@@ -103,5 +130,9 @@ For Android add `-P lvMode=wan` so LAN and WAN install side by side. Requires Fl
 * `lib/src/files.dart`, `link.dart` — encrypted file RPC, WebDAV bridge
 * `lib/src/platform/` — native capture/input via FFI (Win32 GDI + SendInput, X11 + XTest + XFixes, CoreGraphics + CGEvent), Android (Kotlin MediaProjection + AccessibilityService + DocumentsProvider), OS drive mounting
 * `lib/src/discovery.dart`, `upnp.dart` — LAN discovery and router port mapping
+* `lib/src/stream/rtc.dart` — Game mode (WebRTC hardware video + audio, signaled through the encrypted session)
+* `lib/src/platform/gamepad_host.dart`, `windows/runner/virtual_gamepad.cpp` — virtual Xbox controllers (ViGEmBus / uinput)
+* `lib/src/platform/theater.dart`, `android-xr` `XrBridge.kt` — Theater mode / Android XR Full Space big screen
+* `installer/` — Windows Inno Setup script, `.deb`, AppImage and `.dmg` builders
 
 License: AGPL-3.0 (see `LICENSE`).

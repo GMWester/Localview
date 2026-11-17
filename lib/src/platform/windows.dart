@@ -187,6 +187,8 @@ class WinInjector implements InputInjector {
           _key(0, u, 0x0004);
           _key(0, u, 0x0006);
         }
+      case PadState():
+        break; // handled by GamepadInjector
       case SpecialAction():
         break;
     }
