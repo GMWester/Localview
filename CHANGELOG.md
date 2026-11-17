@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+
+- **Choose the monitor**: when the device you control has several monitors, the new monitor button in the session toolbar switches between them (or *All displays* on Windows and Linux). The mouse follows the monitor you see, and game mode streams that monitor too. Each viewer picks its own monitor.
+- **Several windows at once** (Windows, macOS, Linux, Android, Android XR and Meta Quest): open each monitor of a device in its own window (monitor button → *Open … in a new window*), and open other devices in new windows from the device list (the ⧉ button on a nearby device, or *Open in a new window* in a saved device's menu). With three or more devices connected you can watch all of them side by side. On headsets every window is its own panel. Extra windows log in with a one-time session ticket from the window that opened them, so they ask for no password or authenticator code; tickets live only in the device's memory, last 12 hours and end when its password or 2FA changes.
+- **Version in every file name**: release files now end with their version, e.g. `Localview-Combined-android-arm64-1.4.0.apk` or `Localview-Combined-windows-x64-setup-1.4.0.exe` (`.deb` and `.rpm` already did). In-app updates recognise both the new and the old names; Localview 1.3.0 and older look only for the old names, so update those once by hand or with the Localview Installer.
+
 ## 1.3.0
 
 - **PC VR on Linux and SteamOS**: Linux (x64) and SteamOS PCs - including the Steam Deck - can now stream SteamVR games to Meta Quest and Android XR headsets, like the Windows version. Localview installs its SteamVR driver and a compositor capture layer (based on ALVR's) automatically when you press *Play SteamVR games* on the headset. Video is encoded on the GPU with NVENC (NVIDIA) or VA-API (AMD / Intel), with x264 as a fallback; this needs `ffmpeg` on the PC.

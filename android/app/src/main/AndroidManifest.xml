@@ -44,6 +44,23 @@
             </intent-filter>
         </activity>
 
+        <!-- Extra viewer windows: one task each (separate panels on Android XR / Meta Quest). -->
+        <activity
+            android:name=".ViewerActivity"
+            android:exported="false"
+            android:documentLaunchMode="always"
+            android:resizeableActivity="true"
+            android:autoRemoveFromRecents="true"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+        </activity>
+
         <service
             android:name=".CaptureService"
             android:exported="false"

@@ -27,7 +27,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"Localview", origin, size)) {
+  // Extra viewer windows get their device / monitor as the title.
+  std::wstring title = L"Localview";
+  wchar_t viewer_title[256];
+  DWORD n = ::GetEnvironmentVariableW(L"LOCALVIEW_VIEWER_TITLE", viewer_title, 256);
+  if (n > 0 && n < 256) title = viewer_title;
+  if (!window.Create(title, origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

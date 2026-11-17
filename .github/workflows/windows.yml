@@ -61,7 +61,7 @@ jobs:
             Copy-Item -Recurse vr\driver\localview "$dir\vr\localview"
           }
           Rename-Item "$dir\localview.exe" "Localview $m.exe"
-          Compress-Archive -Path $dir -DestinationPath "$dir.zip"
+          Compress-Archive -Path $dir -DestinationPath "$dir-$env:VERSION.zip"
       - name: Fetch the ViGEmBus controller driver installer
         shell: pwsh
         env:
@@ -77,18 +77,18 @@ jobs:
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (!(Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           $src = (Resolve-Path "Localview-$m-windows-$a").Path
-          $isargs = @("/DAppLabel=$m", "/DAppMode=${{ matrix.mode }}", "/DAppVersion=$env:VERSION", "/DArch=$a", "/DSourceDir=$src", "/DOutputBase=Localview-$m-windows-$a-setup")
+          $isargs = @("/DAppLabel=$m", "/DAppMode=${{ matrix.mode }}", "/DAppVersion=$env:VERSION", "/DArch=$a", "/DSourceDir=$src", "/DOutputBase=Localview-$m-windows-$a-setup-$env:VERSION")
           $vig = Get-ChildItem vigem -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($vig) { $isargs += "/DVigemInstaller=$($vig.FullName)" }
           & $iscc @isargs installer\windows.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Move-Item "installer\Localview-$m-windows-$a-setup.exe" .
+          Move-Item "installer\Localview-$m-windows-$a-setup-$env:VERSION.exe" .
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.mode }}-${{ matrix.arch }}
           path: |
             Localview-*-windows-*.zip
-            Localview-*-windows-*-setup.exe
+            Localview-*-windows-*-setup-*.exe
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -134,7 +134,7 @@ jobs:
             cat <<'NOTES'
             > **Easiest way to install: get the [Localview Installer](https://github.com/GMWester/LocalViewInstaller/releases/latest).** Pick your device, processor and version in the app and it downloads, installs and launches the right Localview for you — no need to find the matching file below.
             
-            One release for every platform. Pick your device, then a variant:
+            One release for every platform; every file name ends with the version (`<version>`, e.g. `1.4.0`). Pick your device, then a variant:
             
             * **Combined** (recommended): nearby devices are listed automatically and anything you connect to once is saved to *My devices*, reachable from anywhere.
             * **LAN**: lists devices on the same router; connect with the password set on that device.
@@ -142,15 +142,15 @@ jobs:
             
             | Device | Installer | Portable |
             |---|---|---|
-            | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup.exe` | `…-windows-x64.zip` |
-            | Windows 11 on ARM (Snapdragon, Surface Pro X) | `Localview-<variant>-windows-arm64-setup.exe` | `…-windows-arm64.zip` |
-            | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos.dmg` | `…-macos-universal.zip` |
-            | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` (Debian/Ubuntu), `localview-<variant>-<version>-1.<arch>.rpm` (Fedora/RHEL/openSUSE) | `…-linux-<arch>.AppImage`, `…-linux-<arch>.tar.gz` |
-            | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>.AppImage` | `…-steamos-<arch>.tar.gz` |
-            | Android phones/tablets (Android 7.0+) | `Localview-<variant>-android.apk` (all processors) | per processor: `…-android-arm64.apk`, `…-android-armv7.apk` (older 32-bit devices), `…-android-x86_64.apk` |
-            | Android TV / Google TV | `Localview-<variant>-android-tv.apk` (all processors) | per processor: `…-android-tv-armv7.apk` (most TVs), `…-android-tv-arm64.apk`, `…-android-tv-x86_64.apk` |
-            | Android XR & Meta Quest | `Localview-<variant>-android-xr.apk` (all processors) | per processor: `…-android-xr-arm64.apk` (Quest 2/3/3S/Pro, Android XR), `…-android-xr-armv7.apk` (older 32-bit headsets, Android 10+), `…-android-xr-x86_64.apk` (Android XR emulator) |
-            | iOS / iPadOS (sideload) | `Localview-<variant>-ios-unsigned.ipa` | |
+            | Windows 10/11 x64 | `Localview-<variant>-windows-x64-setup-<version>.exe` | `…-windows-x64-<version>.zip` |
+            | Windows 11 on ARM (Snapdragon, Surface Pro X) | `Localview-<variant>-windows-arm64-setup-<version>.exe` | `…-windows-arm64-<version>.zip` |
+            | macOS (Apple Silicon + Intel) | `Localview-<variant>-macos-<version>.dmg` | `…-macos-universal-<version>.zip` |
+            | Linux x64 / arm64 | `localview-<variant>_<version>_<arch>.deb` (Debian/Ubuntu), `localview-<variant>-<version>-1.<arch>.rpm` (Fedora/RHEL/openSUSE) | `…-linux-<arch>-<version>.AppImage`, `…-linux-<arch>-<version>.tar.gz` |
+            | SteamOS: Steam Frame (arm64), Steam Deck (x64) | `Localview-<variant>-steamos-<arch>-<version>.AppImage` | `…-steamos-<arch>-<version>.tar.gz` |
+            | Android phones/tablets (Android 7.0+) | `Localview-<variant>-android-<version>.apk` (all processors) | per processor: `…-android-arm64-<version>.apk`, `…-android-armv7-<version>.apk` (older 32-bit devices), `…-android-x86_64-<version>.apk` |
+            | Android TV / Google TV | `Localview-<variant>-android-tv-<version>.apk` (all processors) | per processor: `…-android-tv-armv7-<version>.apk` (most TVs), `…-android-tv-arm64-<version>.apk`, `…-android-tv-x86_64-<version>.apk` |
+            | Android XR & Meta Quest | `Localview-<variant>-android-xr-<version>.apk` (all processors) | per processor: `…-android-xr-arm64-<version>.apk` (Quest 2/3/3S/Pro, Android XR), `…-android-xr-armv7-<version>.apk` (older 32-bit headsets, Android 10+), `…-android-xr-x86_64-<version>.apk` (Android XR emulator) |
+            | iOS / iPadOS (sideload) | `Localview-<variant>-ios-unsigned-<version>.ipa` | |
             
             Everything is end-to-end encrypted (X25519 + ChaCha20-Poly1305; game mode media is DTLS-SRTP keyed through that channel).
             **Game mode** streams Windows/macOS/Linux PCs with hardware H.264 video, system audio and controller passthrough (up to 4K60 / 1080p120).

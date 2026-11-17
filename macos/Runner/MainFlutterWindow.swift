@@ -12,6 +12,11 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    // Extra viewer windows get their device / monitor as the title.
+    if let title = ProcessInfo.processInfo.environment["LOCALVIEW_VIEWER_TITLE"] {
+      self.title = title
+    }
+
     // "localview/window": fullscreen for Theater mode.
     let channel = FlutterMethodChannel(
       name: "localview/window", binaryMessenger: flutterViewController.engine.binaryMessenger)

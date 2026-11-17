@@ -20,7 +20,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+open class MainActivity : FlutterActivity() {
     companion object {
         /** Channel to the Flutter UI; used by the VR activity to report back. */
         var channel: MethodChannel? = null
@@ -29,6 +29,13 @@ class MainActivity : FlutterActivity() {
     private val reqCapture = 4711
     private var pendingCapture: MethodChannel.Result? = null
     private var multicastLock: WifiManager.MulticastLock? = null
+    private var myChannel: MethodChannel? = null
+
+    override fun onResume() {
+        super.onResume()
+        // The VR activity reports to whichever Localview window was used last.
+        myChannel?.let { channel = it }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,6 +58,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "localview/android")
         channel = ch
+        myChannel = ch
         ch.setMethodCallHandler { call, result ->
             @Suppress("UNCHECKED_CAST")
             if (XrBridge.handle(this, call.method, call.arguments as? Map<String, Any?>, result)) return@setMethodCallHandler
@@ -70,6 +78,24 @@ class MainActivity : FlutterActivity() {
                 }
                 "stopCapture" -> { stopService(Intent(this, CaptureService::class.java)); result.success(null) }
                 "isCapturing" -> result.success(CaptureService.running)
+                // Extra viewer windows (new task; a separate panel on Android XR / Meta Quest).
+                "openWindow" -> {
+                    val launch = call.argument<String>("launch")
+                    val title = call.argument<String>("title")
+                    val i = Intent(this, ViewerActivity::class.java)
+                        .putExtra(ViewerActivity.EXTRA_LAUNCH, launch)
+                        .putExtra(ViewerActivity.EXTRA_TITLE, title)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
+                            Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+                    try {
+                        startActivity(i)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("window", e.message, null)
+                    }
+                }
+                "viewerLaunch" -> result.success(intent?.getStringExtra(ViewerActivity.EXTRA_LAUNCH))
+                "closeWindow" -> { finishAndRemoveTask(); result.success(null) }
                 "grab" -> {
                     val f = CaptureService.latest
                     if (f == null) result.success(null)

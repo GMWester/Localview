@@ -39,6 +39,15 @@ class AppController extends ChangeNotifier {
   List<String> localIps = [];
   String? hostWarning;
 
+  /// Viewer windows: no hosting, discovery or drives - just what the remote view needs.
+  Future<void> initViewer() async {
+    if (Platform.isAndroid) {
+      try {
+        isTv = await AndroidBridge.isTv();
+      } catch (_) {}
+    }
+  }
+
   Future<void> init() async {
     if (Platform.isAndroid) {
       try {

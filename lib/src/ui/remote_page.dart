@@ -17,6 +17,8 @@ import '../stream/rtc.dart';
 import 'files_page.dart';
 import 'gamepad.dart';
 import 'theme.dart';
+import '../platform/platform.dart';
+import '../viewer_window.dart';
 
 class RemotePage extends StatefulWidget {
   const RemotePage({super.key, required this.app, required this.session});
@@ -113,7 +115,7 @@ class _RemotePageState extends State<RemotePage> {
       }
       setState(() {});
     });
-    await r.start(_preset);
+    await r.start(_preset.onMonitor(s.monitor?.osIndex));
     // Fall back if nothing arrives (e.g. UDP blocked between the networks).
     Future.delayed(const Duration(seconds: 15), () {
       if (mounted && _rtc == r && !r.active) {
@@ -280,6 +282,31 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void _snack(String t) => ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(t)));
+
+  String _monitorLabel(MonitorInfo m) => m.isAll ? '${m.name} · ${m.w}×${m.h}' : '${m.name}${m.primary ? ' (main)' : ''} · ${m.w}×${m.h}';
+
+  void _selectMonitor(String id) {
+    s.selectMonitor(id);
+    // Game mode streams the screen through WebRTC: restart it on the new monitor.
+    final r = _rtc;
+    if (r != null) unawaited(r.start(_preset.onMonitor(s.monitor?.osIndex)));
+  }
+
+  Future<void> _openMonitorWindow(String id) async {
+    final m = s.monitors.firstWhere((x) => x.id == id, orElse: () => s.monitors.first);
+    final ok = s.ticketId != null &&
+        await openViewerWindow(ViewerLaunch(
+          host: s.params.host,
+          port: s.params.port,
+          ticketId: s.ticketId!,
+          ticketKey: s.ticketKey!,
+          deviceName: s.peerName,
+          deviceId: s.peerId,
+          monitor: m.id,
+          monitorName: m.name,
+        ));
+    if (!ok) _snack('Could not open a new window.');
+  }
 
   @override
   void dispose() {
@@ -516,6 +543,21 @@ class _RemotePageState extends State<RemotePage> {
                   IconButton(tooltip: 'Home', icon: const Icon(Icons.circle_outlined), onPressed: () => s.send(specialMsg(Special.home))),
                   IconButton(tooltip: 'Recents', icon: const Icon(Icons.crop_square), onPressed: () => s.send(specialMsg(Special.recents))),
                 ],
+                if (s.monitors.length > 1)
+                  PopupMenuButton<String>(
+                    tooltip: 'Monitor${s.monitor == null ? '' : ': ${s.monitor!.name}'}',
+                    icon: const Icon(Icons.desktop_windows_outlined),
+                    onSelected: (v) => v.startsWith('win:') ? _openMonitorWindow(v.substring(4)) : _selectMonitor(v),
+                    itemBuilder: (_) => [
+                      for (final m in s.monitors)
+                        CheckedPopupMenuItem(value: m.id, checked: m.id == s.monitor?.id, child: Text(_monitorLabel(m))),
+                      if (canOpenViewerWindows && s.ticketId != null && !widget.app.isTv) ...[
+                        const PopupMenuDivider(),
+                        for (final m in s.monitors.where((m) => !m.isAll))
+                          PopupMenuItem(value: 'win:${m.id}', child: Text('Open ${m.name} in a new window')),
+                      ],
+                    ],
+                  ),
                 if (s.peerShares)
                   IconButton(
                     tooltip: 'Files',

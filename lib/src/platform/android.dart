@@ -43,7 +43,7 @@ class AndroidInjector implements InputInjector {
   void _call(String m, [Map<String, Object?>? a]) => androidChannel.invokeMethod(m, a).catchError((_) => null);
 
   @override
-  void inject(InputEvent e) {
+  void inject(InputEvent e, {MonitorInfo? monitor}) {
     switch (e) {
       case PointerMove(:final x, :final y):
         _x = x;

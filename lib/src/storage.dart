@@ -230,10 +230,13 @@ class AppStore extends ChangeNotifier {
         'paired': paired.map((p) => p.toJson()).toList(),
       };
 
+  /// Viewer windows read the settings but never write them (the main window owns the file).
+  bool readOnly = false;
+
   Future<void> save() async {
     notifyListeners();
     final f = _file;
-    if (f == null) return;
+    if (f == null || readOnly) return;
     final tmp = File('${f.path}.tmp');
     await tmp.writeAsString(jsonEncode(toJson()), flush: true);
     if (!Platform.isWindows) {
