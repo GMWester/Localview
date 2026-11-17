@@ -198,6 +198,7 @@ class AppStore extends ChangeNotifier {
     final totp = j['totpSecret'] as String?;
     totpSecret = totp == null ? null : base64Decode(totp);
     animations = j['animations'] as bool? ?? true;
+    keepInBackground = j['keepInBackground'] as bool? ?? true;
     mountDrives = j['mountDrives'] as bool? ?? true;
     paired
       ..clear()
@@ -226,14 +227,21 @@ class AppStore extends ChangeNotifier {
         'vrBitrate': vrBitrate,
         if (totpSecret != null) 'totpSecret': base64Encode(totpSecret!),
         'animations': animations,
+        'keepInBackground': keepInBackground,
         'mountDrives': mountDrives,
         'paired': paired.map((p) => p.toJson()).toList(),
       };
 
+  /// Closing the window keeps Localview running while it is connected / can be controlled.
+  bool keepInBackground = true;
+
+  /// Viewer windows read the settings but never write them (the main window owns the file).
+  bool readOnly = false;
+
   Future<void> save() async {
     notifyListeners();
     final f = _file;
-    if (f == null) return;
+    if (f == null || readOnly) return;
     final tmp = File('${f.path}.tmp');
     await tmp.writeAsString(jsonEncode(toJson()), flush: true);
     if (!Platform.isWindows) {

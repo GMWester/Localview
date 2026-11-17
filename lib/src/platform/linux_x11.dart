@@ -29,6 +29,57 @@ final _xKeysymToKeycode =
 final _xKeycodeToKeysym = _x11
     .lookupFunction<Uint64 Function(Pointer<Void>, Uint8, Int32), int Function(Pointer<Void>, int, int)>('XKeycodeToKeysym');
 
+final _xGetAtomName =
+    _x11.lookupFunction<Pointer<Utf8> Function(Pointer<Void>, Uint64), Pointer<Utf8> Function(Pointer<Void>, int)>('XGetAtomName');
+
+/// Monitors from XRandR (XRRGetMonitors), plus the whole root window as "All displays".
+List<MonitorInfo> x11Monitors() {
+  final d = _xOpenDisplay(nullptr);
+  if (d == nullptr) return const [];
+  try {
+    final screen = _xDefaultScreen(d);
+    final root = _xRootWindow(d, screen);
+    final out = <MonitorInfo>[];
+    try {
+      final rr = DynamicLibrary.open('libXrandr.so.2');
+      final getMonitors = rr.lookupFunction<Pointer<Uint8> Function(Pointer<Void>, Uint64, Int32, Pointer<Int32>),
+          Pointer<Uint8> Function(Pointer<Void>, int, int, Pointer<Int32>)>('XRRGetMonitors');
+      final freeMonitors = rr.lookupFunction<Void Function(Pointer<Uint8>), void Function(Pointer<Uint8>)>('XRRFreeMonitors');
+      final n = calloc<Int32>();
+      final mons = getMonitors(d, root, 1, n);
+      try {
+        // XRRMonitorInfo: Atom name; Bool primary, automatic; int noutput, x, y, width, height, mwidth, mheight; RROutput *outputs
+        const size = 56;
+        for (var i = 0; i < n.value && mons != nullptr; i++) {
+          final b = ByteData.sublistView((mons + i * size).asTypedList(size));
+          final atom = b.getUint64(0, Endian.host);
+          var name = 'Display ${i + 1}';
+          final pName = atom == 0 ? nullptr : _xGetAtomName(d, atom);
+          if (pName != nullptr) {
+            name = pName.toDartString();
+            _xFree(pName.cast());
+          }
+          out.add(MonitorInfo(name, name, b.getInt32(20, Endian.host), b.getInt32(24, Endian.host),
+              b.getInt32(28, Endian.host), b.getInt32(32, Endian.host),
+              primary: b.getInt32(8, Endian.host) != 0, osIndex: i));
+        }
+      } finally {
+        if (mons != nullptr) freeMonitors(mons);
+        calloc.free(n);
+      }
+    } catch (_) {
+      // No XRandR: the whole screen is the only monitor.
+    }
+    final w = _xDisplayWidth(d, screen), h = _xDisplayHeight(d, screen);
+    if (out.isEmpty) return [MonitorInfo('screen', 'Screen', 0, 0, w, h, primary: true, osIndex: 0)];
+    if (!out.any((m) => m.primary)) out[0] = MonitorInfo(out[0].id, out[0].name, out[0].x, out[0].y, out[0].w, out[0].h, primary: true, osIndex: out[0].osIndex);
+    out.add(MonitorInfo(MonitorInfo.allId, 'All displays', 0, 0, w, h));
+    return out;
+  } finally {
+    _xCloseDisplay(d);
+  }
+}
+
 class X11Capturer implements ScreenCapturer {
   X11Capturer() {
     _d = _xOpenDisplay(nullptr);
@@ -48,9 +99,12 @@ class X11Capturer implements ScreenCapturer {
   Uint8List? _buf;
 
   @override
-  RawFrame? capture() {
-    final w = _xDisplayWidth(_d, _screen), h = _xDisplayHeight(_d, _screen);
-    final img = _xGetImage(_d, _root, 0, 0, w, h, 0xFFFFFFFFFFFFFFFF, 2 /* ZPixmap */);
+  RawFrame? capture({MonitorInfo? monitor}) {
+    final rw = _xDisplayWidth(_d, _screen), rh = _xDisplayHeight(_d, _screen);
+    // Clip to the root window (a monitor list can be briefly stale after a layout change).
+    final ox = (monitor?.x ?? 0).clamp(0, rw - 1), oy = (monitor?.y ?? 0).clamp(0, rh - 1);
+    final w = (monitor?.w ?? rw).clamp(1, rw - ox), h = (monitor?.h ?? rh).clamp(1, rh - oy);
+    final img = _xGetImage(_d, _root, ox, oy, w, h, 0xFFFFFFFFFFFFFFFF, 2 /* ZPixmap */);
     if (img == nullptr) return null;
     try {
       final hdr = ByteData.sublistView(img.asTypedList(64));
@@ -62,21 +116,21 @@ class X11Capturer implements ScreenCapturer {
       if (_buf == null || _buf!.length != size) _buf = Uint8List(size);
       _buf!.setAll(0, data.asTypedList(size));
       final f = RawFrame(w, h, bpl, _buf!, PixelFmt.bgra);
-      _drawCursor(f);
+      _drawCursor(f, ox, oy);
       return f;
     } finally {
       _xDestroyImage(img);
     }
   }
 
-  void _drawCursor(RawFrame f) {
+  void _drawCursor(RawFrame f, int ox, int oy) {
     final g = _getCursor;
     if (g == null) return;
     final ci = g(_d);
     if (ci == nullptr) return;
     try {
       final b = ByteData.sublistView(ci.asTypedList(32));
-      final cx = b.getInt16(0, Endian.host), cy = b.getInt16(2, Endian.host);
+      final cx = b.getInt16(0, Endian.host) - ox, cy = b.getInt16(2, Endian.host) - oy;
       final cw = b.getUint16(4, Endian.host), ch = b.getUint16(6, Endian.host);
       final hx = b.getUint16(8, Endian.host), hy = b.getUint16(10, Endian.host);
       final pix = Pointer<Uint64>.fromAddress(b.getUint64(24, Endian.host)).asTypedList(cw * ch);
@@ -144,11 +198,12 @@ class X11Injector implements InputInjector {
   }
 
   @override
-  void inject(InputEvent e) {
+  void inject(InputEvent e, {MonitorInfo? monitor}) {
     switch (e) {
       case PointerMove(:final x, :final y):
-        final w = _xDisplayWidth(_d, _screen), h = _xDisplayHeight(_d, _screen);
-        _motion(_d, _screen, (x * (w - 1)).round(), (y * (h - 1)).round(), 0);
+        final w = monitor?.w ?? _xDisplayWidth(_d, _screen), h = monitor?.h ?? _xDisplayHeight(_d, _screen);
+        final ox = monitor?.x ?? 0, oy = monitor?.y ?? 0;
+        _motion(_d, _screen, ox + (x.clamp(0.0, 1.0) * (w - 1)).round(), oy + (y.clamp(0.0, 1.0) * (h - 1)).round(), 0);
       case PointerButton(:final button, :final down):
         _button(_d, switch (button) { Btn.right => 3, Btn.middle => 2, _ => 1 }, down ? 1 : 0, 0);
       case Scroll(:final dx, :final dy):
