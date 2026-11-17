@@ -210,8 +210,14 @@ Future<String?> installUpdate(File f) async {
     return 'The disk image is open: drag Localview into Applications to replace the old version, then reopen it.';
   }
   if (Platform.isAndroid) {
-    final ok = await _android.invokeMethod<bool>('installApk', {'path': p}) ?? false;
-    return ok ? null : 'Allow "Install unknown apps" for Localview, then press Update again.';
+    final r = await _android.invokeMethod<Object>('installApk', {'path': p});
+    if (r == 'signature') {
+      return 'This update is signed with a different key than the Localview installed here, so Android can\'t '
+          'install it over it (older builds were signed with a temporary key). Uninstall Localview once, then '
+          'install the new version from the release page or with the Localview Installer. Settings and saved '
+          'devices are removed this one time; later updates install normally.';
+    }
+    return r == 'ok' || r == true ? null : 'Allow "Install unknown apps" for Localview, then press Update again.';
   }
   if (Platform.isLinux) {
     switch (linuxInstall) {

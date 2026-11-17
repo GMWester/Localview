@@ -206,6 +206,7 @@ class AppStore extends ChangeNotifier {
     totpSecret = totp == null ? null : base64Decode(totp);
     animations = j['animations'] as bool? ?? true;
     keepInBackground = j['keepInBackground'] as bool? ?? true;
+    adbOverLocalview = j['adbOverLocalview'] as bool? ?? false;
     mountDrives = j['mountDrives'] as bool? ?? true;
     paired
       ..clear()
@@ -235,9 +236,13 @@ class AppStore extends ChangeNotifier {
         if (totpSecret != null) 'totpSecret': base64Encode(totpSecret!),
         'animations': animations,
         'keepInBackground': keepInBackground,
+        'adbOverLocalview': adbOverLocalview,
         'mountDrives': mountDrives,
         'paired': paired.map((p) => p.toJson()).toList(),
       };
+
+  /// Android: let connected devices reach this device's adb (Wireless debugging) through Localview.
+  bool adbOverLocalview = false;
 
   /// Closing the window keeps Localview running while it is connected / can be controlled.
   bool keepInBackground = true;
