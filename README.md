@@ -113,6 +113,9 @@ The in-app file browser (folder button in the session toolbar) works on every pl
 * **Mouse/keyboard**: everything is forwarded (physical key codes, so any layout works).
 * **Touch**: tap = click, long-press = right-click, drag = drag, two fingers = scroll, keyboard button = on-screen keyboard.
 * **TV remotes, game controllers, VR controllers**: the *virtual cursor* (mouse button in the toolbar; on by default on TV) — arrows/stick move, OK/A clicks, X right-clicks, Back/B toggles the toolbar. On Quest / Android XR the controller ray works as a normal pointer.
+* **Monitors**: on a device with several monitors, the monitor button in the session toolbar picks which one you see (or *All displays* on Windows/Linux); mouse input and game mode follow it.
+* **Keep running in the background** (This device → Appearance): closing the window while connected (or while the computer can be controlled) hides it instead of quitting; connections and their mounted drives stay available. Reopen from the tray icon / Dock or by starting Localview again; *Quit* is in the tray menu. On Android a notification keeps the connections running.
+* **Several windows**: open each monitor, or each of several devices, in its own window (monitor button → *Open … in a new window*; device list → ⧉ / *Open in a new window*). Works on Windows, macOS, Linux, Android and on Android XR / Meta Quest, where every window is a separate panel. Extra windows reuse the login of the window that opened them through a session ticket (kept only in the device's memory, valid 12 hours, cleared when its password or 2FA changes).
 * Appearance (This device → Appearance): System, Light, Dark, or **OLED** (pure black, ideal for OLED phones and VR headsets).
 * Animations (This device → Appearance → Animations): turn off every UI animation (switches, menus, dialogs, page transitions, ripples).
 * Toolbar: stream quality (resolution/fps), clipboard send/receive, Win key, Alt+Tab, Ctrl+Shift+Esc, Android Back/Home/Recents.
@@ -128,7 +131,7 @@ The in-app file browser (folder button in the session toolbar) works on every pl
 
 ## Installing
 
-* **Windows**: run `Localview-<variant>-windows-x64-setup.exe`. It adds Start menu/desktop shortcuts, an optional sign-in auto-start (so the PC is reachable), a firewall rule, and optionally the ViGEmBus controller driver. The `.zip` is the same app without installation.
+* **Windows**: run `Localview-<variant>-windows-x64-setup-<version>.exe` (ARM64 PCs: `…-windows-arm64-setup-<version>.exe`). It adds Start menu/desktop shortcuts, an optional sign-in auto-start (so the PC is reachable), a firewall rule, and optionally the ViGEmBus controller driver. The `.zip` is the same app without installation.
 * **macOS**: open the `.dmg` and drag Localview to Applications.
 * **Linux**: Debian/Ubuntu `sudo apt install ./localview-<variant>_<version>_<arch>.deb`; Fedora/RHEL `sudo dnf install ./localview-<variant>-<version>-1.<arch>.rpm`; or make the AppImage executable and run it.
 * **SteamOS**: in Desktop Mode, download the AppImage for your device (arm64 for Steam Frame, x64 for Steam Deck), mark it executable, then add it to Steam as a Non-Steam Game.

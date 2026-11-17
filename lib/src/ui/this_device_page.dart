@@ -340,6 +340,20 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                   await s.save();
                 },
               ),
+              if (!Platform.isIOS)
+                SwitchListTile(
+                  secondary: const Icon(Icons.cloud_sync_outlined),
+                  title: const Text('Keep running in the background'),
+                  subtitle: Text(Platform.isAndroid
+                      ? 'Closing Localview keeps your connections, and the drives they share, open (shown as a notification)'
+                      : 'Closing the window keeps your connections and their drives open, and this computer reachable. '
+                          'Reopen it from the ${Platform.isMacOS ? 'Dock' : 'tray icon'} or by starting Localview again'),
+                  value: s.keepInBackground,
+                  onChanged: (v) async {
+                    s.keepInBackground = v;
+                    await s.save();
+                  },
+                ),
             ]),
           ),
           Card(

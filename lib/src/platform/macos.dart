@@ -61,6 +61,30 @@ final _setFlags = _cg.lookupFunction<Void Function(Pointer<Void>, Uint64), void 
 final _setUnicode = _cg.lookupFunction<Void Function(Pointer<Void>, UnsignedLong, Pointer<Uint16>),
     void Function(Pointer<Void>, int, Pointer<Uint16>)>('CGEventKeyboardSetUnicodeString');
 
+final _activeDisplays = _cg.lookupFunction<Int32 Function(Uint32, Pointer<Uint32>, Pointer<Uint32>),
+    int Function(int, Pointer<Uint32>, Pointer<Uint32>)>('CGGetActiveDisplayList');
+
+/// Active displays (bounds in points, the coordinate space of CGEvent).
+List<MonitorInfo> macMonitors() {
+  final ids = calloc<Uint32>(16), n = calloc<Uint32>();
+  try {
+    if (_activeDisplays(16, ids, n) != 0) return const [];
+    final main = _mainDisplay();
+    return [
+      for (var i = 0; i < n.value; i++)
+        () {
+          final id = ids[i];
+          final b = _displayBounds(id);
+          return MonitorInfo('$id', 'Display ${i + 1}', b.x.round(), b.y.round(), b.w.round(), b.h.round(),
+              primary: id == main, osIndex: i);
+        }(),
+    ];
+  } finally {
+    calloc.free(ids);
+    calloc.free(n);
+  }
+}
+
 /// Permission helpers (macOS 10.15+).
 bool macHasScreenAccess() {
   try {
@@ -93,8 +117,8 @@ class MacCapturer implements ScreenCapturer {
   Uint8List? _buf;
 
   @override
-  RawFrame? capture() {
-    final id = _mainDisplay();
+  RawFrame? capture({MonitorInfo? monitor}) {
+    final id = int.tryParse(monitor?.id ?? '') ?? _mainDisplay();
     final img = _createImage(id);
     if (img == nullptr) return null;
     try {
@@ -146,10 +170,10 @@ class MacInjector implements InputInjector {
   CGPoint _pos() => _pt.ref;
 
   @override
-  void inject(InputEvent e) {
+  void inject(InputEvent e, {MonitorInfo? monitor}) {
     switch (e) {
       case PointerMove(:final x, :final y):
-        final b = _displayBounds(_mainDisplay());
+        final b = _displayBounds(int.tryParse(monitor?.id ?? '') ?? _mainDisplay());
         _pt.ref
           ..x = b.x + x * b.w
           ..y = b.y + y * b.h;
