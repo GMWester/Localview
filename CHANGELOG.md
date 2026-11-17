@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+- **PC VR on Linux and SteamOS**: Linux (x64) and SteamOS PCs - including the Steam Deck - can now stream SteamVR games to Meta Quest and Android XR headsets, like the Windows version. Localview installs its SteamVR driver and a compositor capture layer (based on ALVR's) automatically when you press *Play SteamVR games* on the headset. Video is encoded on the GPU with NVENC (NVIDIA) or VA-API (AMD / Intel), with x264 as a fallback; this needs `ffmpeg` on the PC.
+- **Windows VR games through Proton**: Windows-only SteamVR games run through Steam's Proton on Linux / SteamOS and stream to the headset like native ones. Non-Steam Windows VR games work when added to Steam (*Add a Non-Steam Game*) with Proton selected; plain Wine has no SteamVR bridge.
+- **Android SD cards in shared drives**: an Android device's shared storage now shows *Internal storage* plus one *SD card (ID)* folder per SD card or USB drive, so cards appear in Windows Explorer, Finder and Linux file managers. (Writing to an SD card needs Android 11 or newer with *All files access*; on Android 10 and older, cards are read-only.)
+- **Animations switch fixed**: turning animations off now also stops switch, dropdown and popup-menu, segmented-button, tab, navigation, snack-bar and tooltip animations (not just page transitions and ripples). Scrolling keeps its normal feel and loading spinners stay still.
+
 ## 1.2.0
 
 - **Two-factor authentication**: protect a device with an authenticator app (Google Authenticator, Microsoft Authenticator, Authy, 1Password, …). Set up by QR code or by typing the key, then confirm with a code. Every connection to that device — including saved/paired devices — then asks for the current code. Codes are checked by the device itself, can't be reused, and wrong codes count toward the lockout.

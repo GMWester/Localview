@@ -34,6 +34,18 @@ jobs:
           echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
       - run: flutter config --no-analytics && flutter pub get
       - run: flutter build linux --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }} --dart-define=LV_FLAVOR=steamos
+      - name: PC VR SteamVR driver + compositor capture layer (x64 - SteamVR for Linux is x64 only)
+        if: matrix.arch == 'x64'
+        run: |
+          sudo apt-get install -y libvulkan-dev glslang-tools libunwind-dev libdrm-dev
+          cmake -S vr/driver -B vr/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build vr/build -j"$(nproc)"
+          test -f vr/driver/localview/bin/linux64/driver_localview.so
+          B=$(ls -d build/linux/*/release/bundle)
+          mkdir -p "$B/vr/linux/layer"
+          cp -r vr/driver/localview "$B/vr/"
+          cp vr/linux/vrcompositor-wrapper.sh vr/linux/LICENSE-ALVR vr/linux/README.md "$B/vr/linux/"
+          cp vr/linux/layer/localview_capture.json.in vr/linux/layer/LICENSE-Arm "$B/vr/linux/layer/"
       - name: Package (tar.gz, AppImage)
         run: |
           M="${{ matrix.label }}"
@@ -117,6 +129,7 @@ jobs:
             
             Everything is end-to-end encrypted (X25519 + ChaCha20-Poly1305; game mode media is DTLS-SRTP keyed through that channel).
             **Game mode** streams Windows/macOS/Linux PCs with hardware H.264 video, system audio and controller passthrough (up to 4K60 / 1080p120).
+            **PC VR** streams SteamVR games to Meta Quest and Android XR headsets from a Windows, Linux (x64) or SteamOS PC, including Windows VR games running through Proton.
           NOTES
             echo
             echo "Source-Commit: $SOURCE_COMMIT"

@@ -18,6 +18,7 @@ BuildArch:      $ARCH
 AutoReqProv:    no
 Requires:       gtk3, libX11, libXtst, libXfixes, pulseaudio-libs
 Recommends:     gvfs
+Suggests:       ffmpeg-free
 
 %global debug_package %{nil}
 %global _build_id_links none

@@ -112,6 +112,7 @@ jobs:
             
             Everything is end-to-end encrypted (X25519 + ChaCha20-Poly1305; game mode media is DTLS-SRTP keyed through that channel).
             **Game mode** streams Windows/macOS/Linux PCs with hardware H.264 video, system audio and controller passthrough (up to 4K60 / 1080p120).
+            **PC VR** streams SteamVR games to Meta Quest and Android XR headsets from a Windows, Linux (x64) or SteamOS PC, including Windows VR games running through Proton.
           NOTES
             echo
             echo "Source-Commit: $SOURCE_COMMIT"

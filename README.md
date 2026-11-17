@@ -36,7 +36,7 @@ When the controlled device is a Windows, macOS or Linux PC, Localview switches t
 * **Meta Quest** (Horizon OS): the same build runs as a resizable panel (drag the corners to make it huge). Horizon OS does not let third-party panel apps create their own environment, so the theater there is the fullscreen, toolbar-less view.
 * **Steam Frame / Steam Deck** (`steamos` build): add the AppImage to Steam (*Add a Non-Steam Game*). In the headset, SteamOS shows it on its large virtual screen; Localview's Theater mode goes fullscreen with no toolbar, and Steam Input forwards the Frame/Deck controls as a controller to the PC.
 * **PC VR (SteamVR games)** — play SteamVR / OpenXR PC VR games on **Meta Quest** and **Android XR** headsets, like Virtual Desktop or ALVR:
-  1. Install the Windows build of Localview on the gaming PC (it includes a SteamVR driver) and install Steam + SteamVR.
+  1. Install the Windows, Linux (x64) or SteamOS build of Localview on the gaming PC (it includes a SteamVR driver) and install Steam + SteamVR. On Linux / SteamOS also install `ffmpeg` (see below).
   2. On the headset, install the `android-xr` APK, connect to the PC, and press the **cube icon** (*Play SteamVR games*) in the session toolbar.
   3. Localview registers its driver with SteamVR, (re)starts SteamVR configured for your headset's resolution, field of view and refresh rate, and the headset switches to an immersive OpenXR view.
   * Video: GPU H.264 (NVIDIA/AMD/Intel through Media Foundation), 50–200 Mbps, side-by-side stereo at the headset's recommended resolution (capped at 2048 px per eye), 90 Hz.
@@ -46,7 +46,9 @@ When the controlled device is a Windows, macOS or Linux PC, Localview switches t
   * Security: every UDP packet is ChaCha20-Poly1305 encrypted and authenticated with a fresh 256-bit key that the PC generates per session and sends through the end-to-end encrypted Localview connection; replayed or forged packets are dropped.
   * Leave PC VR by holding the left controller's menu button for 3 seconds.
   * Network: use 5/6 GHz Wi-Fi (ideally the PC wired to the router). Over the internet, UDP port 47920 must be reachable (the WAN/Combined builds request it via UPnP).
-  * Requirements: Windows 10/11 with a GPU that has a hardware H.264 encoder (practically every NVIDIA GTX 900+/AMD RX 400+/Intel HD 500+), SteamVR; Quest 2/3/3S/Pro or an Android XR headset.
+  * Requirements: Windows 10/11, or Linux x64 / SteamOS, with a GPU that has a hardware H.264 encoder (practically every NVIDIA GTX 900+/AMD RX 400+/Intel HD 500+), SteamVR; Quest 2/3/3S/Pro or an Android XR headset.
+  * **Linux / SteamOS** (details in [`vr/linux`](vr/linux/README.md)): Localview copies its driver to `~/.local/share/localview/vr`, registers it with SteamVR and installs a small wrapper for SteamVR's compositor that loads the Localview capture layer only while you stream (other headsets keep working). Video is encoded by `ffmpeg`: install it with your package manager (`sudo apt install ffmpeg`, `sudo dnf install ffmpeg-free`, `sudo pacman -S ffmpeg`); on SteamOS, whose system is read-only, put a static ffmpeg build at `~/.local/share/localview/ffmpeg/ffmpeg`. NVIDIA uses NVENC, AMD/Intel use VA-API (on Fedora, H.264 encoding needs the RPM Fusion `mesa-va-drivers-freeworld` / `intel-media-driver`), otherwise x264 on the CPU. Use the native Steam package rather than Flatpak Steam.
+  * **Wine / Proton**: Windows-only VR games run through Steam's Proton, which passes their SteamVR (OpenVR) calls to the Linux SteamVR and therefore to Localview; nothing extra to set up. For a Windows VR game that isn't from Steam, add its `.exe` to Steam (*Games → Add a Non-Steam Game*), then *Properties → Compatibility → Force Proton*. Plain Wine has no SteamVR bridge, so launch such games through Proton. Proton/Wine games also work in game mode (flat screen streaming) without any setup.
 
 ## LAN variant
 
@@ -110,6 +112,7 @@ The in-app file browser (folder button in the session toolbar) works on every pl
 * **Touch**: tap = click, long-press = right-click, drag = drag, two fingers = scroll, keyboard button = on-screen keyboard.
 * **TV remotes, game controllers, VR controllers**: the *virtual cursor* (mouse button in the toolbar; on by default on TV) — arrows/stick move, OK/A clicks, X right-clicks, Back/B toggles the toolbar. On Quest / Android XR the controller ray works as a normal pointer.
 * Appearance (This device → Appearance): System, Light, Dark, or **OLED** (pure black, ideal for OLED phones and VR headsets).
+* Animations (This device → Appearance → Animations): turn off every UI animation (switches, menus, dialogs, page transitions, ripples).
 * Toolbar: stream quality (resolution/fps), clipboard send/receive, Win key, Alt+Tab, Ctrl+Shift+Esc, Android Back/Home/Recents.
 
 ## Platform setup notes
