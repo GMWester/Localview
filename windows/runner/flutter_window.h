@@ -7,6 +7,7 @@
 #include <flutter/method_channel.h>
 
 #include <memory>
+#include <string>
 
 #include "win32_window.h"
 
@@ -34,6 +35,16 @@ class FlutterWindow : public Win32Window {
   // "localview/window" channel: borderless fullscreen for Theater mode.
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> window_channel_;
   void SetFullscreen(bool on);
+
+  // Keep running in the background: closing the window hides it to a tray icon
+  // while Localview has connections or is hosting.
+  bool keep_alive_ = false;
+  bool tray_added_ = false;
+  std::wstring tray_tip_ = L"Localview";
+  void HideToTray();
+  void ShowFromTray();
+  void RemoveTray();
+  void NotifyHidden(bool hidden);
   bool fullscreen_ = false;
   LONG_PTR saved_style_ = 0;
   RECT saved_rect_ = {0, 0, 0, 0};

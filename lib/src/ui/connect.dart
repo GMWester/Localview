@@ -92,6 +92,7 @@ Future<ClientSession?> connectTo(
     }
     await s.save();
   }
+  app.trackClient(session);
   if (newWindow) {
     // Logged in here (password / key / authenticator code); the new window uses the session ticket.
     final ok = session.ticketId != null &&

@@ -18,6 +18,8 @@ import android.provider.DocumentsContract
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
+import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 
 open class MainActivity : FlutterActivity() {
@@ -30,6 +32,20 @@ open class MainActivity : FlutterActivity() {
     private var pendingCapture: MethodChannel.Result? = null
     private var multicastLock: WifiManager.MulticastLock? = null
     private var myChannel: MethodChannel? = null
+
+    // The main window's Flutter engine outlives the activity, so connections keep running
+    // after the window is closed (KeepAliveService keeps the process). Viewer windows get
+    // their own engine each.
+    override fun provideFlutterEngine(context: Context): FlutterEngine? {
+        if (this is ViewerActivity) return null
+        FlutterEngineCache.getInstance().get("main")?.let { return it }
+        val engine = FlutterEngine(context.applicationContext)
+        engine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
+        FlutterEngineCache.getInstance().put("main", engine)
+        return engine
+    }
+
+    override fun shouldDestroyEngineWithHost(): Boolean = this is ViewerActivity
 
     override fun onResume() {
         super.onResume()
@@ -96,6 +112,10 @@ open class MainActivity : FlutterActivity() {
                 }
                 "viewerLaunch" -> result.success(intent?.getStringExtra(ViewerActivity.EXTRA_LAUNCH))
                 "closeWindow" -> { finishAndRemoveTask(); result.success(null) }
+                "setKeepAlive" -> {
+                    KeepAliveService.update(this, call.argument<Boolean>("on") == true, call.argument<String>("tip") ?: "")
+                    result.success(null)
+                }
                 "grab" -> {
                     val f = CaptureService.latest
                     if (f == null) result.success(null)

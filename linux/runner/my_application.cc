@@ -13,6 +13,72 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// Keep running in the background: closing the window hides it (with a tray icon
+// on desktops that show one) while Localview has connections or is hosting.
+static gboolean keep_alive = FALSE;
+static GtkWindow* main_window = nullptr;
+static FlMethodChannel* main_channel = nullptr;
+static GtkStatusIcon* tray_icon = nullptr;
+
+static void notify_hidden(gboolean hidden) {
+  if (main_channel == nullptr) return;
+  g_autoptr(FlValue) v = fl_value_new_bool(hidden);
+  fl_method_channel_invoke_method(main_channel, "hidden", v, nullptr, nullptr, nullptr);
+}
+
+static void remove_tray() {
+  if (tray_icon == nullptr) return;
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+  gtk_status_icon_set_visible(tray_icon, FALSE);
+  G_GNUC_END_IGNORE_DEPRECATIONS
+  g_clear_object(&tray_icon);
+}
+
+static void show_window() {
+  if (main_window == nullptr) return;
+  gtk_widget_show(GTK_WIDGET(main_window));
+  gtk_window_present(main_window);
+  remove_tray();
+  notify_hidden(FALSE);
+}
+
+static void tray_activate_cb(GtkStatusIcon*, gpointer) { show_window(); }
+
+static void tray_quit_cb(GtkMenuItem*, gpointer) {
+  keep_alive = FALSE;
+  remove_tray();
+  if (main_window != nullptr) gtk_widget_destroy(GTK_WIDGET(main_window));
+}
+
+static void tray_open_cb(GtkMenuItem*, gpointer) { show_window(); }
+
+static void tray_popup_cb(GtkStatusIcon*, guint, guint, gpointer) {
+  GtkWidget* menu = gtk_menu_new();
+  GtkWidget* open = gtk_menu_item_new_with_label("Open Localview");
+  GtkWidget* quit = gtk_menu_item_new_with_label("Quit (disconnects)");
+  g_signal_connect(open, "activate", G_CALLBACK(tray_open_cb), nullptr);
+  g_signal_connect(quit, "activate", G_CALLBACK(tray_quit_cb), nullptr);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), open);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
+  gtk_widget_show_all(menu);
+  gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
+}
+
+static void hide_window() {
+  if (main_window == nullptr) return;
+  gtk_widget_hide(GTK_WIDGET(main_window));
+  if (tray_icon == nullptr) {
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    tray_icon = gtk_status_icon_new_from_icon_name("io.localview.localview");
+    gtk_status_icon_set_tooltip_text(tray_icon, "Localview (running in the background)");
+    gtk_status_icon_set_title(tray_icon, "Localview");
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    g_signal_connect(tray_icon, "activate", G_CALLBACK(tray_activate_cb), nullptr);
+    g_signal_connect(tray_icon, "popup-menu", G_CALLBACK(tray_popup_cb), nullptr);
+  }
+  notify_hidden(TRUE);
+}
+
 // Called when first Flutter frame received.
 // "localview/window" channel: fullscreen for Theater mode (Steam Frame /
 // Steam Deck / desktop). Runs on the GTK main thread.
@@ -29,6 +95,24 @@ static void window_method_cb(FlMethodChannel* channel, FlMethodCall* call,
     } else {
       gtk_window_unfullscreen(window);
     }
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(fl_method_call_get_name(call), "setKeepAlive") == 0) {
+    FlValue* args = fl_method_call_get_args(call);
+    FlValue* on = args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP
+                      ? fl_value_lookup_string(args, "on")
+                      : nullptr;
+    keep_alive = on != nullptr && fl_value_get_type(on) == FL_VALUE_TYPE_BOOL && fl_value_get_bool(on);
+    // Nothing left to keep alive while hidden: quit as a normal close would have.
+    if (!keep_alive && main_window != nullptr && !gtk_widget_get_visible(GTK_WIDGET(main_window))) {
+      remove_tray();
+      gtk_widget_destroy(GTK_WIDGET(main_window));
+    }
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(fl_method_call_get_name(call), "hide") == 0) {
+    hide_window();
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(fl_method_call_get_name(call), "show") == 0) {
+    show_window();
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
   } else {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
@@ -88,6 +172,8 @@ static void my_application_activate(GApplication* application) {
       FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(window_channel, window_method_cb, window,
                                             nullptr);
+  main_window = window;
+  main_channel = window_channel;
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

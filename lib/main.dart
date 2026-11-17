@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'src/app_controller.dart';
+import 'src/background.dart';
 import 'src/config.dart';
 import 'src/files.dart';
 import 'src/storage.dart';
@@ -25,6 +26,8 @@ Future<void> main() async {
     return;
   }
   store.fsRoot = await _defaultFsRoot();
+  // Already running (maybe hidden in the background): bring that window back instead.
+  if (await showRunningInstance()) exit(0);
   final app = AppController(store);
   await app.init();
   runApp(LocalviewApp(app: app));

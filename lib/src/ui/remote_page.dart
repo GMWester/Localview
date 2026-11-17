@@ -61,6 +61,7 @@ class _RemotePageState extends State<RemotePage> {
     super.initState();
     _virtualCursor = widget.app.isTv;
     s.addListener(_onSession);
+    widget.app.background.hidden.addListener(_onWindowHidden);
     s.onClipboard = (t) {
       Clipboard.setData(ClipboardData(text: t));
       _snack('Remote clipboard copied to this device.');
@@ -281,6 +282,12 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
+  /// Window hidden in the background: the connection (and its drive) stays, the picture pauses.
+  void _onWindowHidden() {
+    if (_rtc?.active == true) return; // game mode keeps its own stream
+    s.setStream(video: !widget.app.background.hidden.value);
+  }
+
   void _snack(String t) => ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(t)));
 
   String _monitorLabel(MonitorInfo m) => m.isAll ? '${m.name} · ${m.w}×${m.h}' : '${m.name}${m.primary ? ' (main)' : ''} · ${m.w}×${m.h}';
@@ -311,6 +318,7 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void dispose() {
     s.removeListener(_onSession);
+    widget.app.background.hidden.removeListener(_onWindowHidden);
     _pads?.dispose();
     _pcvr?.stop();
     _vrAudio?.dispose();
