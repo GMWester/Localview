@@ -14,6 +14,7 @@ import 'platform/platform.dart';
 import 'protocol.dart';
 import 'storage.dart';
 import 'totp.dart';
+import 'tunnel.dart';
 
 /// Snapshot of what the host isolate needs from [AppStore].
 Map<String, Object?> hostConfigFrom(AppStore s, [String? publicIp]) => {
@@ -30,6 +31,7 @@ Map<String, Object?> hostConfigFrom(AppStore s, [String? publicIp]) => {
       'share': s.shareFiles,
       'mount': s.mountDrives,
       'fsRoot': s.fsRoot,
+      'adb': s.adbOverLocalview,
       'totp': s.totpSecret,
       'trusted': [
         for (final p in s.paired)
@@ -86,6 +88,9 @@ class HostService extends ChangeNotifier {
   Future<void> Function(int sid, String name, String url, String volume)? onMount;
   Future<void> Function(int sid)? onUnmount;
   Future<String?> Function()? onClipboardGet;
+
+  /// ADB over Localview: this device's adb ports (Android), for tunnels from viewers.
+  Future<Map<String, Object?>> Function()? onAdbInfo;
 
   Future<void> start() async {
     if (_iso != null) return;
@@ -178,6 +183,14 @@ class HostService extends ChangeNotifier {
         await onUnmount?.call(m[1] as int);
       case 'clipSet':
         onClipboardSet?.call(m[1] as String);
+      case 'adbInfo':
+        Map<String, Object?> info = const {};
+        try {
+          info = await onAdbInfo?.call() ?? const {};
+        } catch (e) {
+          debugPrint('adb info failed: $e');
+        }
+        _toIso?.send(['adbInfoResult', m[1], info]);
       case 'clipGet':
         final t = await onClipboardGet?.call();
         _toIso?.send(['clip', m[1], t ?? '']);
@@ -213,6 +226,15 @@ class _HostIsolate {
   int _nextGrab = 1;
   final Map<int, Completer<RawFrame?>> _grabs = {};
   final Map<int, Completer<String>> _clips = {};
+  final Map<int, Completer<Map<String, Object?>>> _adbInfos = {};
+
+  Future<Map<String, Object?>> adbInfo() {
+    final id = _nextGrab++;
+    final c = Completer<Map<String, Object?>>();
+    _adbInfos[id] = c;
+    toMain.send(['adbInfo', id]);
+    return c.future.timeout(const Duration(seconds: 8), onTimeout: () => const {});
+  }
   final Map<String, List<DateTime>> _failures = {};
   final Set<int> _usedTotpSteps = {};
 
@@ -260,6 +282,8 @@ class _HostIsolate {
         }
       case 'clip':
         _clips.remove(m[1] as int)?.complete(m[2] as String);
+      case 'adbInfoResult':
+        _adbInfos.remove(m[1] as int)?.complete((m[2] as Map).cast<String, Object?>());
       case 'kickAll':
         _kickAll();
       case 'rtcSend':
@@ -417,6 +441,7 @@ class _HostIsolate {
         'rtc': cfg['rtc'] == true,
         'pads': cfg['pads'] == true,
         'vr': cfg['vr'] == true,
+        'adb': cfg['adb'] == true,
         if (cfg['publicIp'] != null) 'publicIp': cfg['publicIp'],
         'port': cfg['port'],
         if (newKey != null) 'pairKey': base64Encode(newKey),
@@ -454,6 +479,8 @@ class _HostSession {
   final bool viaPairKey;
   final FrameEncoder encoder = FrameEncoder();
   late FileLink files;
+  late final TunnelHost tunnels =
+      TunnelHost(sendMsg, allowed: () => host.cfg['adb'] == true, adbInfo: host.adbInfo);
   bool video = true;
   Future<void> _sendChain = Future.value();
   int _inFlight = 0;
@@ -499,6 +526,7 @@ class _HostSession {
     _closed = true;
     sock.close();
     _ackWaiter?.complete();
+    tunnels.closeAll();
   }
 
   Future<void> run() async {
@@ -507,7 +535,7 @@ class _HostSession {
     try {
       while (!_closed) {
         final m = await ch.open(await sock.next(timeout: const Duration(seconds: 30)));
-        if (m.isEmpty || files.handle(m)) continue;
+        if (m.isEmpty || files.handle(m) || tunnels.handle(m)) continue;
         switch (m[0]) {
           case Msg.ping:
             await sendMsg(Uint8List.fromList([Msg.pong, ...m.sublist(1)]));
