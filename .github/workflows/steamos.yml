@@ -37,7 +37,7 @@ jobs:
       - name: PC VR SteamVR driver + compositor capture layer (x64 - SteamVR for Linux is x64 only)
         if: matrix.arch == 'x64'
         run: |
-          sudo apt-get install -y libvulkan-dev glslang-tools libunwind-dev libdrm-dev
+          sudo apt-get install -y libvulkan-dev glslang-tools libunwind-dev libdrm-dev libx11-dev libxrandr-dev
           cmake -S vr/driver -B vr/build -DCMAKE_BUILD_TYPE=Release
           cmake --build vr/build -j"$(nproc)"
           test -f vr/driver/localview/bin/linux64/driver_localview.so
