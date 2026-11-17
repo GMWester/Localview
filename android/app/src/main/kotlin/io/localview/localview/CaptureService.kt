@@ -30,6 +30,7 @@ class CaptureService : Service() {
         const val EXTRA_DATA = "data"
         @Volatile var latest: Frame? = null
         @Volatile var running = false
+        @Volatile var activeProjection: MediaProjection? = null
         private var frameCounter = 0L
         const val MAX_SIDE = 1920
     }
@@ -52,7 +53,14 @@ class CaptureService : Service() {
         }
         val n = builder.setContentTitle("Localview").setContentText("This screen can be viewed by your paired devices")
             .setSmallIcon(android.R.drawable.ic_menu_view).setOngoing(true).build()
-        if (Build.VERSION.SDK_INT >= 29) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+        if (Build.VERSION.SDK_INT >= 30 && AudioCapture.permitted(this)) {
+            // With the microphone type the sound can be captured too while Localview is in the background.
+            try {
+                startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } catch (_: Exception) {
+                startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+            }
+        } else if (Build.VERSION.SDK_INT >= 29) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         else startForeground(1, n)
 
         val code = intent?.getIntExtra(EXTRA_CODE, 0) ?: 0
@@ -62,6 +70,7 @@ class CaptureService : Service() {
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val p = mpm.getMediaProjection(code, data) ?: run { stopSelf(); return START_NOT_STICKY }
         projection = p
+        activeProjection = p
         p.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() { stopSelf() }
         }, handler)
@@ -142,6 +151,8 @@ class CaptureService : Service() {
         try { (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).unregisterDisplayListener(displayListener) } catch (_: Exception) {}
         running = false
         latest = null
+        activeProjection = null
+        AudioCapture.stop(this)
         display?.release()
         reader?.close()
         try { projection?.stop() } catch (_: Exception) {}

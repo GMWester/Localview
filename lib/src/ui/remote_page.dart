@@ -13,6 +13,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../platform/theater.dart';
 import '../stream/pcvr.dart';
+import '../stream/pcm_audio.dart';
 import '../stream/rtc.dart';
 import 'files_page.dart';
 import 'gamepad.dart';
@@ -51,6 +52,7 @@ class _RemotePageState extends State<RemotePage> {
   /// Sound plays only on this device (true) or only on the controlled device (false).
   bool _soundHere = false;
   RtcClient? _sound; // audio-only stream while game mode is off
+  PcmPlayer? _pcm; // sound of an Android host
   PadForwarder? _pads;
   bool _touchPad = false;
   bool _theater = false;
@@ -215,6 +217,18 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Future<void> _startSound() async {
+    if (s.peerPcmAudio) {
+      if (_pcm != null) return;
+      final p = PcmPlayer();
+      final err = p.start();
+      if (err != null) {
+        _snack(err);
+        return;
+      }
+      _pcm = p;
+      s.onAudioPcm = p.push;
+      return;
+    }
     if (_sound != null || _rtc != null || !s.peerRtc || !await rtcUsable()) return;
     final a = RtcClient(s.send);
     _sound = a;
@@ -223,6 +237,9 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Future<void> _stopSound() async {
+    s.onAudioPcm = null;
+    _pcm?.stop();
+    _pcm = null;
     final a = _sound;
     _sound = null;
     if (a == null) return;
@@ -389,6 +406,8 @@ class _RemotePageState extends State<RemotePage> {
     final snd = _sound;
     _sound = null;
     snd?.dispose();
+    _pcm?.stop();
+    _pcm = null;
     if (_theater) Theater.exit();
     if (!s.closed) s.close();
     _focus.dispose();

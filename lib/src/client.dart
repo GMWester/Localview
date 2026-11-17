@@ -189,6 +189,9 @@ class ClientSession extends ChangeNotifier {
   /// The host can play its sound only here (silencing its own speakers).
   bool peerAudioRoute = false;
   void Function(String mode, String? error)? onAudioRoute;
+  /// The host sends its sound as PCM (Android hosts); [onAudioPcm] receives it.
+  bool peerPcmAudio = false;
+  void Function(Uint8List pcm)? onAudioPcm;
   void setAudioRoute(String mode) => send(jsonMsg(Msg.audioRoute, {'mode': mode}));
   void Function(String? error)? onRotateResult;
   void rotate(String mode) => send(jsonMsg(Msg.rotate, {'mode': mode}));
@@ -248,6 +251,7 @@ class ClientSession extends ChangeNotifier {
         peerAdb = j['adb'] == true;
         peerRotate = j['rotate'] == true;
         peerAudioRoute = j['audioRoute'] == true;
+        peerPcmAudio = j['pcmAudio'] == true;
         newPairKey = j['pairKey'] as Uint8List?;
         ticketId = j['ticketId'] as String?;
         ticketKey = j['ticketKey'] as Uint8List?;
@@ -288,7 +292,9 @@ class ClientSession extends ChangeNotifier {
         onClipboard?.call(m[1] as String);
       case 'rtc':
         final msg = m[1] as Uint8List;
-        if (msg.isNotEmpty && msg[0] == Msg.audioRouteResult) {
+        if (msg.isNotEmpty && msg[0] == Msg.audioPcm) {
+          onAudioPcm?.call(Uint8List.sublistView(msg, 1));
+        } else if (msg.isNotEmpty && msg[0] == Msg.audioRouteResult) {
           final j = jsonBody(msg);
           onAudioRoute?.call(j['mode'] as String? ?? 'host', j['error'] as String?);
         } else if (msg.isNotEmpty && Msg.isVr(msg[0])) {
@@ -516,6 +522,7 @@ Future<void> _clientIsolateMain(List args) async {
         'adb': welcome['adb'] == true,
         'rotate': welcome['rotate'] == true,
         'audioRoute': welcome['audioRoute'] == true,
+        'pcmAudio': welcome['pcmAudio'] == true,
         if (welcome['pairKey'] != null) 'pairKey': base64Decode(welcome['pairKey'] as String),
         if (welcome['ticket'] is Map) 'ticketId': (welcome['ticket'] as Map)['id'],
         if (welcome['ticket'] is Map) 'ticketKey': base64Decode((welcome['ticket'] as Map)['key'] as String),

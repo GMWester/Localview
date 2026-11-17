@@ -41,6 +41,7 @@ dependencies:
   flutter_webrtc: ^1.6.3
   gamepads: ^0.1.15
   qr: ^4.0.1
+  mp_audio_stream: ^0.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -124,10 +124,14 @@ open class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startCapture" -> {
                     if (CaptureService.running) { result.success(true); return@setMethodCallHandler }
+                    val ask = mutableListOf<String>()
                     if (Build.VERSION.SDK_INT >= 33 &&
                         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+                        ask += Manifest.permission.POST_NOTIFICATIONS
                     }
+                    // The sound apps play can be sent to the controlling device (Android 10+).
+                    if (Build.VERSION.SDK_INT >= 29 && !AudioCapture.permitted(this)) ask += Manifest.permission.RECORD_AUDIO
+                    if (Build.VERSION.SDK_INT >= 23 && ask.isNotEmpty()) requestPermissions(ask.toTypedArray(), 1)
                     val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                     pendingCapture = result
                     @Suppress("DEPRECATION")
@@ -186,6 +190,13 @@ open class MainActivity : FlutterActivity() {
                         result.success(it)
                     }
                 }
+                "audioSupported" -> result.success(AudioCapture.supported())
+                "audioStart" -> {
+                    if (Build.VERSION.SDK_INT >= 29 && !AudioCapture.permitted(this)) requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+                    result.success(AudioCapture.start(applicationContext, call.argument<Boolean>("silence") == true))
+                }
+                "audioRead" -> result.success(AudioCapture.read())
+                "audioStop" -> { AudioCapture.stop(applicationContext); result.success(null) }
                 "grab" -> {
                     val f = CaptureService.latest
                     if (f == null) result.success(null)

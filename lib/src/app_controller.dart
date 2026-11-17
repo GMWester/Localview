@@ -74,7 +74,44 @@ class AppController extends ChangeNotifier {
   final Set<int> _soundHere = {};
   bool _silenced = false;
 
+  // Android hosts: the sound apps play is captured and sent to those viewers as PCM.
+  bool _pcmAudio = false;
+  Timer? _pcmTimer;
+
+  Future<String?> _applyPcmAudio() async {
+    final want = _soundHere.isNotEmpty;
+    if (!want) {
+      _pcmTimer?.cancel();
+      _pcmTimer = null;
+      await AndroidBridge.audioStop();
+      return null;
+    }
+    final err = await AndroidBridge.audioStart(silence: true);
+    if (err != null) return err;
+    var busy = false;
+    _pcmTimer ??= Timer.periodic(const Duration(milliseconds: 20), (_) async {
+      if (busy) return;
+      busy = true;
+      try {
+        final pcm = await AndroidBridge.audioRead();
+        if (pcm != null && pcm.isNotEmpty) {
+          final m = Uint8List(pcm.length + 1)
+            ..[0] = Msg.audioPcm
+            ..setRange(1, pcm.length + 1, pcm);
+          for (final sid in _soundHere) {
+            host.sendRtc(sid, m);
+          }
+        }
+      } catch (_) {
+      } finally {
+        busy = false;
+      }
+    });
+    return null;
+  }
+
   Future<String?> _applySpeakers() async {
+    if (_pcmAudio) return _applyPcmAudio();
     final want = _soundHere.isNotEmpty;
     if (want == _silenced || _speakers == null) return null;
     final err = await _speakers.silence(want);
@@ -94,7 +131,8 @@ class AppController extends ChangeNotifier {
     } else {
       _soundHere.remove(sid);
     }
-    final err = _speakers == null ? 'This device cannot silence its speakers' : await _applySpeakers();
+    final err = _speakers == null && !_pcmAudio ? 'This device cannot silence its speakers' : await _applySpeakers();
+    if (err != null) _soundHere.remove(sid);
     host.sendRtc(sid, jsonMsg(Msg.audioRouteResult, {'mode': mode, 'error': ?err}));
   }
 
@@ -105,6 +143,11 @@ class AppController extends ChangeNotifier {
       } catch (_) {}
     }
     pads = Platform.isAndroid || Platform.isIOS ? null : createVirtualPads();
+    if (Platform.isAndroid) {
+      try {
+        _pcmAudio = await AndroidBridge.audioSupported();
+      } catch (_) {}
+    }
     host = HostService(
       store,
       externalCapture: Platform.isAndroid ? AndroidBridge.grab : null,
@@ -125,7 +168,8 @@ class AppController extends ChangeNotifier {
       ..onRotate = (Platform.isAndroid ? AndroidBridge.setRotation : null);
     host
       ..rtcCapable = rtcHostSupported && await rtcUsable()
-      ..audioRouteCapable = _speakers != null
+      ..audioRouteCapable = _speakers != null || _pcmAudio
+      ..pcmAudioCapable = _pcmAudio
       ..padsCapable = pads != null
       ..vrCapable = pcvrHostSupported
       ..onRtc = ((sid, m) {

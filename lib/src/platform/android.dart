@@ -82,6 +82,13 @@ class AndroidBridge {
 
   /// Switches the screen to 'portrait', 'landscape' or 'auto'. Returns 'permission' when the
   /// user still has to allow "Modify system settings" (that screen is opened), other errors, or null.
+  /// Phone sound for the controlling device (Android 10+): PCM s16le, stereo, 48 kHz.
+  static Future<bool> audioSupported() async => await androidChannel.invokeMethod<bool>('audioSupported') ?? false;
+  static Future<String?> audioStart({required bool silence}) =>
+      androidChannel.invokeMethod<String>('audioStart', {'silence': silence});
+  static Future<Uint8List?> audioRead() => androidChannel.invokeMethod<Uint8List>('audioRead');
+  static Future<void> audioStop() => androidChannel.invokeMethod('audioStop');
+
   static Future<String?> setRotation(String mode) =>
       androidChannel.invokeMethod<String>('setRotation', {'mode': mode});
 
