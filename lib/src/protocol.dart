@@ -33,6 +33,14 @@ abstract final class Msg {
   static const gamepad = 0x60;
 
   static bool isRtc(int t) => t >= 0x50 && t <= 0x5F;
+
+  // PC VR (SteamVR -> headset). Control messages only; media flows over the
+  // driver's own encrypted UDP link whose key is delivered in vrReady.
+  static const vrStart = 0x70; // headset -> PC: display description
+  static const vrReady = 0x71; // PC -> headset: {port, key}
+  static const vrError = 0x72; // PC -> headset: {error}
+  static const vrStop = 0x73; // headset -> PC
+  static bool isVr(int t) => t >= 0x70 && t <= 0x7F;
 }
 
 /// XInput button bits.

@@ -33,7 +33,18 @@ When the controlled device is a Windows, macOS or Linux PC, Localview switches t
 * **Android XR** (`android-xr` build): **Theater mode** (the VR icon in the session toolbar; headsets open in it automatically) switches to Full Space and turns the app into a big screen in front of you, Virtual-Desktop style. You pick the screen size (1.5 m to a 10 m cinema) and the surroundings (dark void, passthrough of your room, or the system environment) under ⋮ → *Theater size & surroundings*. Headset controllers act as the mouse (ray + trigger) and are forwarded as an Xbox controller in Game mode.
 * **Meta Quest** (Horizon OS): the same build runs as a resizable panel (drag the corners to make it huge). Horizon OS does not let third-party panel apps create their own environment, so the theater there is the fullscreen, toolbar-less view.
 * **Steam Frame / Steam Deck** (`steamos` build): add the AppImage to Steam (*Add a Non-Steam Game*). In the headset, SteamOS shows it on its large virtual screen; Localview's Theater mode goes fullscreen with no toolbar, and Steam Input forwards the Frame/Deck controls as a controller to the PC.
-* **What this is not (yet): PCVR.** Playing SteamVR/OpenXR **VR games** with head tracking (like Virtual Desktop's or ALVR's VR mode) needs a SteamVR driver on the PC plus a native OpenXR renderer on the headset with reprojection. That is a separate, much larger component and is not part of 1.0.0. Flat games, videos and the desktop do stream to the headset today.
+* **PC VR (SteamVR games)** — play SteamVR / OpenXR PC VR games on **Meta Quest** and **Android XR** headsets, like Virtual Desktop or ALVR:
+  1. Install the Windows build of Localview on the gaming PC (it includes a SteamVR driver) and install Steam + SteamVR.
+  2. On the headset, install the `android-xr` APK, connect to the PC, and press the **cube icon** (*Play SteamVR games*) in the session toolbar.
+  3. Localview registers its driver with SteamVR, (re)starts SteamVR configured for your headset's resolution, field of view and refresh rate, and the headset switches to an immersive OpenXR view.
+  * Video: GPU H.264 (NVIDIA/AMD/Intel through Media Foundation), 50–200 Mbps, side-by-side stereo at the headset's recommended resolution (capped at 2048 px per eye), 90 Hz.
+  * Latency hiding: each frame carries the exact head pose SteamVR rendered it with, and the headset submits it with that pose so its compositor reprojects to your current head position.
+  * Tracking: head and both controllers (position, rotation, velocities) every headset frame; controllers appear to games as Oculus Touch controllers (all buttons, triggers, grips, sticks, capacitive touch) with haptics.
+  * Audio: game sound plays on the headset through the encrypted game-mode audio channel.
+  * Security: every UDP packet is ChaCha20-Poly1305 encrypted and authenticated with a fresh 256-bit key that the PC generates per session and sends through the end-to-end encrypted Localview connection; replayed or forged packets are dropped.
+  * Leave PC VR by holding the left controller's menu button for 3 seconds.
+  * Network: use 5/6 GHz Wi-Fi (ideally the PC wired to the router). Over the internet, UDP port 47920 must be reachable (the WAN/Combined builds request it via UPnP).
+  * Requirements: Windows 10/11 with a GPU that has a hardware H.264 encoder (practically every NVIDIA GTX 900+/AMD RX 400+/Intel HD 500+), SteamVR; Quest 2/3/3S/Pro or an Android XR headset.
 
 ## LAN variant
 
@@ -131,6 +142,9 @@ For Android add `-P lvMode=wan` so LAN and WAN install side by side. Requires Fl
 * `lib/src/stream/rtc.dart` — Game mode (WebRTC hardware video + audio, signaled through the encrypted session)
 * `lib/src/platform/gamepad_host.dart`, `windows/runner/virtual_gamepad.cpp` — virtual Xbox controllers (ViGEmBus / uinput)
 * `lib/src/platform/theater.dart`, `android-xr` `XrBridge.kt` — Theater mode / Android XR Full Space big screen
+* `vr/driver/` — SteamVR driver (C++: virtual HMD + Touch controllers, D3D11 direct-mode compositor, Media Foundation H.264 encoder, encrypted UDP)
+* `vr/common/` — VR wire protocol and ChaCha20-Poly1305 shared by the driver and headset
+* `android-xr` `src/main/cpp/vr_main.cpp` — native OpenXR headset client (MediaCodec decode, reprojection-aware layer submission, controller input, haptics)
 * `installer/` — Windows Inno Setup script, `.deb`, AppImage and `.dmg` builders
 
 License: AGPL-3.0 (see `LICENSE`).

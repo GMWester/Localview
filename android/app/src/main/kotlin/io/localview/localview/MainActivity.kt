@@ -21,6 +21,11 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        /** Channel to the Flutter UI; used by the VR activity to report back. */
+        var channel: MethodChannel? = null
+    }
+
     private val reqCapture = 4711
     private var pendingCapture: MethodChannel.Result? = null
     private var multicastLock: WifiManager.MulticastLock? = null
@@ -44,7 +49,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "localview/android").setMethodCallHandler { call, result ->
+        val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "localview/android")
+        channel = ch
+        ch.setMethodCallHandler { call, result ->
             @Suppress("UNCHECKED_CAST")
             if (XrBridge.handle(this, call.method, call.arguments as? Map<String, Any?>, result)) return@setMethodCallHandler
             val a11y = LocalviewAccessibilityService.instance
