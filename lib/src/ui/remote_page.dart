@@ -477,6 +477,27 @@ class _RemotePageState extends State<RemotePage> {
       _setTheater(false);
       return KeyEventResult.handled;
     }
+    // Android devices take text, not key codes: characters are sent as text (any layout,
+    // Shift, AltGr, accents), editing keys and Ctrl shortcuts as keys.
+    if (s.peerOs == 'android' && (e is KeyDownEvent || e is KeyRepeatEvent)) {
+      final hw = HardwareKeyboard.instance;
+      final ctrl = hw.isControlPressed || hw.isMetaPressed;
+      final alt = hw.isAltPressed;
+      if (ctrl && !alt && e.logicalKey == LogicalKeyboardKey.keyV) {
+        // Ctrl+V pastes this computer's clipboard on the device.
+        Clipboard.getData(Clipboard.kTextPlain).then((d) {
+          final t = d?.text;
+          if (t != null && t.isNotEmpty) s.send(textMsg(Msg.text, t));
+        });
+        return KeyEventResult.handled;
+      }
+      final ch = e.character;
+      final printable = ch != null && ch.isNotEmpty && ch.codeUnitAt(0) >= 0x20 && ch.codeUnitAt(0) != 0x7F;
+      if (printable && !(ctrl && !alt)) {
+        s.send(textMsg(Msg.text, ch));
+        return KeyEventResult.handled;
+      }
+    }
     final hid = e.physicalKey.usbHidUsage;
     if (hid == 0) return KeyEventResult.ignored;
     if (_pads != null && (hid >> 16) == 0x05) return KeyEventResult.handled; // gamepad page: sent as controller

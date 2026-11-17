@@ -1,5 +1,6 @@
 // Android host/client glue: MediaProjection capture and AccessibilityService
 // gestures live in Kotlin (MainActivity.kt / LocalviewAccessibilityService.kt).
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -96,7 +97,34 @@ class AndroidInjector implements InputInjector {
   DateTime _downAt = DateTime(0);
   int? _down;
 
+  bool _ctrl = false;
+
+  /// Android 8+: the finger follows the pointer live (touchDown / touchMove / touchUp).
+  bool? _live;
+  bool _liveDown = false;
+  Timer? _moveTimer;
+  bool _movePending = false;
+
+  // Wheel notches are combined for a moment into one swipe (each swipe cancels the previous).
+  double _wheelX = 0, _wheelY = 0;
+  Timer? _wheelTimer;
+
   void _call(String m, [Map<String, Object?>? a]) => androidChannel.invokeMethod(m, a).catchError((_) => null);
+
+  AndroidInjector() {
+    // Live touch needs Android 8+ and the accessibility service; checked again later if it was off.
+    _checkLive();
+  }
+
+  void _checkLive() {
+    androidChannel.invokeMethod<bool>('liveTouch').then((ok) => _live = ok == true ? true : null).catchError((_) => null);
+  }
+
+  void _flushMove() {
+    if (!_movePending || !_liveDown) return;
+    _movePending = false;
+    _call('touchMove', {'x': _x, 'y': _y});
+  }
 
   @override
   void inject(InputEvent e, {MonitorInfo? monitor}) {
@@ -104,8 +132,37 @@ class AndroidInjector implements InputInjector {
       case PointerMove(:final x, :final y):
         _x = x;
         _y = y;
+        if (_liveDown) {
+          // At most one move segment per ~16 ms, always to the newest position.
+          _movePending = true;
+          _moveTimer ??= Timer(const Duration(milliseconds: 16), () {
+            _moveTimer = null;
+            _flushMove();
+          });
+          return;
+        }
         if (_down != null && _path.length < 400) _path.addAll([x, y]);
       case PointerButton(:final button, :final down):
+        if (button == Btn.right) {
+          if (down) _call('global', {'action': Special.back});
+          return;
+        }
+        if (_live == null && down) _checkLive();
+        if (_live == true) {
+          if (down) {
+            _down = button;
+            _liveDown = true;
+            _call('touchDown', {'x': _x, 'y': _y});
+          } else if (_liveDown) {
+            _moveTimer?.cancel();
+            _moveTimer = null;
+            _movePending = false;
+            _liveDown = false;
+            _down = null;
+            _call('touchUp', {'x': _x, 'y': _y});
+          }
+          return;
+        }
         if (down) {
           _down = button;
           _downAt = DateTime.now();
@@ -115,12 +172,11 @@ class AndroidInjector implements InputInjector {
           return;
         }
         if (_down == null) return;
+        // Android 7: replay the gesture on release.
         final ms = DateTime.now().difference(_downAt).inMilliseconds;
         final dx = _x - _path[0], dy = _y - _path[1];
         final moved = (dx * dx + dy * dy) > 0.0004;
-        if (_down == Btn.right) {
-          _call('global', {'action': Special.back});
-        } else if (!moved) {
+        if (!moved) {
           _call(ms > 550 ? 'longPress' : 'tap', {'x': _x, 'y': _y});
         } else {
           final pts = <double>[];
@@ -134,13 +190,39 @@ class AndroidInjector implements InputInjector {
         }
         _down = null;
       case Scroll(:final dx, :final dy):
-        _call('scroll', {'x': _x, 'y': _y, 'dx': dx, 'dy': dy});
+        _wheelX += dx;
+        _wheelY += dy;
+        _wheelTimer ??= Timer(const Duration(milliseconds: 40), () {
+          _wheelTimer = null;
+          final sx = _wheelX.clamp(-8.0, 8.0), sy = _wheelY.clamp(-8.0, 8.0);
+          _wheelX = 0;
+          _wheelY = 0;
+          _call('scroll', {'x': _x, 'y': _y, 'dx': sx, 'dy': sy});
+        });
       case KeyInput(:final hid, :final down):
-        if (!down) return;
         final u = hid & 0xFFFF;
-        if (u == 0x29) _call('global', {'action': Special.back});
-        if (u == 0x2A) _call('key', {'key': 'backspace'});
-        if (u == 0x28 || u == 0x58) _call('key', {'key': 'enter'});
+        if (u == 0xE0 || u == 0xE4) _ctrl = down; // left / right Ctrl
+        if (!down) return;
+        if (_ctrl) {
+          final k = switch (u) { 0x04 => 'selectAll', 0x06 => 'copy', 0x1B => 'cut', 0x19 => 'paste', _ => null };
+          if (k != null) _call('key', {'key': k});
+          return;
+        }
+        final k = switch (u) {
+          0x2A => 'backspace',
+          0x4C => 'delete',
+          0x28 || 0x58 => 'enter',
+          0x2B => 'tab',
+          0x50 => 'left',
+          0x4F => 'right',
+          0x52 => 'up',
+          0x51 => 'down',
+          0x4A => 'home',
+          0x4D => 'end',
+          _ => null,
+        };
+        if (k != null) _call('key', {'key': k});
+        if (u == 0x29) _call('global', {'action': Special.back}); // Esc
         if (isMeta(hid)) _call('global', {'action': Special.home});
       case TextEntry(:final text):
         _call('text', {'text': text});
