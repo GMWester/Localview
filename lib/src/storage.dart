@@ -108,6 +108,9 @@ class AppStore extends ChangeNotifier {
   String theaterSize = 'medium';
   String theaterEnvironment = 'void';
 
+  /// PC VR stream bitrate (Mbps).
+  int vrBitrate = 150;
+
   /// Root directory shared (null = whole filesystem / all drives on Windows).
   String? fsRoot;
   final List<PairedDevice> paired = [];
@@ -184,6 +187,7 @@ class AppStore extends ChangeNotifier {
     showStreamStats = j['showStreamStats'] as bool? ?? false;
     theaterSize = j['theaterSize'] as String? ?? 'medium';
     theaterEnvironment = j['theaterEnvironment'] as String? ?? 'void';
+    vrBitrate = j['vrBitrate'] as int? ?? 150;
     mountDrives = j['mountDrives'] as bool? ?? true;
     paired
       ..clear()
@@ -209,6 +213,7 @@ class AppStore extends ChangeNotifier {
         'showStreamStats': showStreamStats,
         'theaterSize': theaterSize,
         'theaterEnvironment': theaterEnvironment,
+        'vrBitrate': vrBitrate,
         'mountDrives': mountDrives,
         'paired': paired.map((p) => p.toJson()).toList(),
       };
