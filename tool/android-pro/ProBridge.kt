@@ -59,6 +59,36 @@ object ProBridge {
         }
     }
 
+    /**
+     * The device's whole sound output from the helper (Android 12+), PCM s16le stereo 48 kHz; the
+     * speaker stays silent while it is open. null if the helper isn't running or can't capture it.
+     */
+    fun openAudio(ctx: Context): java.io.InputStream? {
+        if (android.os.Build.VERSION.SDK_INT < 31) return null
+        return try {
+            val s = LocalSocket()
+            s.connect(LocalSocketAddress(ProInputServer.SOCKET, LocalSocketAddress.Namespace.ABSTRACT))
+            s.soTimeout = 2000
+            s.outputStream.write("${token(ctx)}\naudio\n".toByteArray())
+            val i = s.inputStream
+            fun line(): String {
+                val b = StringBuilder()
+                while (true) {
+                    val c = i.read()
+                    if (c < 0 || c == '\n'.code) return b.toString()
+                    b.append(c.toChar())
+                }
+            }
+            if (line() != "ok" || line() != "ok") { s.close(); return null }
+            s.soTimeout = 0
+            object : java.io.FilterInputStream(i) {
+                override fun close() { try { s.close() } catch (_: Exception) {} }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun drop() {
         try { socket?.close() } catch (_: Exception) {}
         socket = null; out = null; reader = null; running = false
