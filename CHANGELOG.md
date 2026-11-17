@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- **Quit Localview**: a *Quit Localview* button at the bottom of *This device* closes the app completely, instead of keeping it in the background (asks first when that ends connections or remote access).
+- **Fixed: no mouse pointer when controlling a phone or tablet** from a computer. Phones and tablets have no on-screen pointer, so your own pointer now stays visible over their picture.
+- **Fixed: SD card missing from an Android device's shared storage.** The volumes now come from Android itself (internal storage, every SD card and USB drive, e.g. *SD card (9C33-6BBD)*), and cards inserted later appear within a few seconds.
+
 ## 1.4.0
 
 - **Choose the monitor**: when the device you control has several monitors, the new monitor button in the session toolbar switches between them (or *All displays* on Windows and Linux). The mouse follows the monitor you see, and game mode streams that monitor too. Each viewer picks its own monitor.

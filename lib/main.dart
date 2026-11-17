@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'src/app_controller.dart';
 import 'src/background.dart';
 import 'src/config.dart';
-import 'src/files.dart';
+import 'src/platform/android.dart';
 import 'src/storage.dart';
 import 'src/ui/home_page.dart';
 import 'src/ui/theme.dart';
@@ -35,7 +35,7 @@ Future<void> main() async {
 
 Future<String?> _defaultFsRoot() async {
   if (Platform.isWindows) return null; // all drive letters
-  if (Platform.isAndroid) return kAndroidVolumesRoot; // internal storage + SD cards / USB drives
+  if (Platform.isAndroid) return AndroidBridge.storageRoot(); // internal storage + SD cards / USB drives
   if (Platform.isIOS) return (await getApplicationDocumentsDirectory()).path;
   return '/';
 }
