@@ -15,7 +15,7 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
-// Some plugins (mp_audio_stream) still build against an old Android SDK and NDK, which the
+// Some plugins (mp_audio_stream) still build against an old Android SDK, NDK and minimum version, which the
 // AndroidX libraries refuse; build them with the app's SDK and NDK instead.
 subprojects {
     if (name != "app") {
@@ -25,6 +25,8 @@ subprojects {
             if (lib != null && app != null) {
                 app.compileSdkVersion?.let { lib.compileSdkVersion(it) }
                 app.ndkVersion?.let { lib.ndkVersion = it }
+                val min = app.defaultConfig.minSdkVersion?.apiLevel ?: 24
+                if ((lib.defaultConfig.minSdkVersion?.apiLevel ?: 0) < min) lib.defaultConfig.minSdk = min
             }
         }
     }
