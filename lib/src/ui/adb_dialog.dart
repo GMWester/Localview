@@ -1,14 +1,66 @@
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../client.dart';
 import 'theme.dart';
 
+String get _adbExe => Platform.isWindows ? 'adb.exe' : 'adb';
+
+/// Where "Install adb" puts Android SDK Platform-Tools.
+Future<Directory> _ownToolsDir() async => Directory('${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}platform-tools');
+
+/// adb installed by Localview itself, else [findAdb].
+Future<String?> findAdbAnywhere() async {
+  if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) return null;
+  try {
+    final f = File('${(await _ownToolsDir()).path}${Platform.pathSeparator}$_adbExe');
+    if (f.existsSync()) return f.path;
+  } catch (_) {}
+  return findAdb();
+}
+
+/// Downloads Google's Android SDK Platform-Tools (adb) into Localview's own folder. Returns adb's path.
+Future<String> installAdb() async {
+  final os = Platform.isWindows ? 'windows' : (Platform.isMacOS ? 'darwin' : 'linux');
+  final url = Uri.parse('https://dl.google.com/android/repository/platform-tools-latest-$os.zip');
+  final client = HttpClient();
+  try {
+    final req = await client.getUrl(url);
+    final res = await req.close();
+    if (res.statusCode != 200) throw HttpException('download failed (HTTP ${res.statusCode})', uri: url);
+    final bytes = <int>[];
+    await for (final c in res) {
+      bytes.addAll(c);
+    }
+    final dir = await _ownToolsDir();
+    await extractPlatformTools(bytes, dir.parent.path);
+    final adb = '${dir.path}${Platform.pathSeparator}$_adbExe';
+    if (!Platform.isWindows) await Process.run('chmod', ['+x', adb]);
+    if (!File(adb).existsSync()) throw const FileSystemException('adb is missing from the download');
+    return adb;
+  } finally {
+    client.close();
+  }
+}
+
+/// Unpacks a Platform-Tools zip (which holds platform-tools/...) into [root].
+Future<void> extractPlatformTools(List<int> zip, String root) async {
+  for (final f in ZipDecoder().decodeBytes(zip)) {
+    if (!f.isFile || f.name.split('/').contains('..')) continue;
+    final out = File('$root${Platform.pathSeparator}${f.name.replaceAll('/', Platform.pathSeparator)}');
+    out.parent.createSync(recursive: true);
+    out.writeAsBytesSync(f.content);
+    if (!Platform.isWindows && (f.mode & 0x49) != 0) await Process.run('chmod', ['+x', out.path]);
+  }
+}
+
 /// Finds the adb program (PATH, then the usual Android SDK locations).
 String? findAdb() {
-  final exe = Platform.isWindows ? 'adb.exe' : 'adb';
+  final exe = _adbExe;
   final env = Platform.environment;
   final home = env['HOME'] ?? env['USERPROFILE'] ?? '';
   final dirs = [
@@ -48,7 +100,8 @@ class _AdbDialogState extends State<_AdbDialog> {
   String? _output;
   bool _busy = false;
   final _code = TextEditingController();
-  final String? _adb = Platform.isWindows || Platform.isLinux || Platform.isMacOS ? findAdb() : null;
+  String? _adb = Platform.isWindows || Platform.isLinux || Platform.isMacOS ? findAdb() : null;
+  bool _installing = false;
 
   ClientSession get s => widget.session;
 
@@ -58,8 +111,22 @@ class _AdbDialogState extends State<_AdbDialog> {
     _refresh();
   }
 
+  Future<void> _install() async {
+    setState(() => _installing = true);
+    try {
+      _adb = await installAdb();
+      _output = null;
+    } catch (e) {
+      _output = 'Could not install adb: $e';
+    }
+    if (!mounted) return;
+    setState(() => _installing = false);
+    await _refresh();
+  }
+
   Future<void> _refresh() async {
     setState(() => _busy = true);
+    _adb ??= await findAdbAnywhere();
     final info = await s.adbInfo();
     final connect = [...(info['connect'] as List? ?? const []).cast<int>(), if (info['legacy'] != null) info['legacy'] as int];
     final pairing = (info['pairing'] as List? ?? const []).cast<int>();
@@ -111,6 +178,9 @@ class _AdbDialogState extends State<_AdbDialog> {
     final List<Widget> body;
     if (i == null) {
       body = [Center(child: busyIndicator())];
+    } else if (i['allowed'] == null) {
+      // No answer (slow network or device): not the same as "not allowed".
+      body = [Text('$name did not answer in time. Press Refresh to ask again.')];
     } else if (i['allowed'] != true) {
       body = [
         Text('$name does not allow ADB over Localview yet.'),
@@ -189,11 +259,26 @@ class _AdbDialogState extends State<_AdbDialog> {
               _command('adb -s 127.0.0.1:${_connectLocal ?? '<port>'} shell "${i['proCommand']}"'),
           ],
         ],
-        if (_adb == null && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
+        if (_adb == null && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) ...[
           const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text('adb was not found on this computer: install Android SDK Platform-Tools, or run the commands above yourself.'),
+            padding: EdgeInsets.only(top: 12),
+            child: Text('adb is not on this computer yet. Localview can download it (Google\'s Android SDK Platform-Tools, '
+                'about 7 MB) into its own folder; the buttons for pairing, connecting and real mouse & keyboard then appear here.'),
           ),
+          const SizedBox(height: 8),
+          Row(children: [
+            FilledButton.icon(
+              onPressed: _installing ? null : _install,
+              icon: _installing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download),
+              label: Text(_installing ? 'Installing adb…' : 'Install adb'),
+            ),
+          ]),
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('By installing you accept the Android SDK Platform-Tools license (developer.android.com/tools/releases/platform-tools).',
+                style: TextStyle(fontSize: 12)),
+          ),
+        ],
         if (_output != null) ...[
           const SizedBox(height: 12),
           SelectableText(_output!, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
