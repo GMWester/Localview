@@ -33,21 +33,40 @@ object AdbInfo {
             "legacy" to legacy?.takeIf { it > 0 }, "sdk" to android.os.Build.VERSION.SDK_INT,
         )
         if (!wireless) { done(base + mapOf("connect" to emptyList<Int>(), "pairing" to emptyList<Int>())); return }
-        discover(ctx) { connect, pairing -> done(base + mapOf("connect" to connect, "pairing" to pairing)) }
+        // Fast path: adbd publishes its wireless port as a property (not readable on every device).
+        val tls = try {
+            val sp = Class.forName("android.os.SystemProperties")
+            (sp.getMethod("get", String::class.java).invoke(null, "service.adb.tls.port") as String).toIntOrNull()
+        } catch (_: Exception) { null }
+        discover(ctx) { connect, pairing ->
+            val c = (connect + listOfNotNull(tls?.takeIf { it > 0 })).distinct()
+            done(base + mapOf("connect" to c, "pairing" to pairing))
+        }
     }
 
     private fun localAddresses(): Set<InetAddress> = try {
         NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.toSet()
     } catch (_: Exception) { emptySet() }
 
-    /** Browses both service types for ~2.5 s and keeps the ones on this device. */
-    private fun discover(ctx: Context, done: (List<Int>, List<Int>) -> Unit) {
+    /**
+     * Browses both service types for ~2.5 s and keeps the ones on this device. Always answers
+     * within ~5 s: on some devices resolving a service never calls back.
+     */
+    private fun discover(ctx: Context, report: (List<Int>, List<Int>) -> Unit) {
+        var answered = false
+        val main0 = Handler(Looper.getMainLooper())
+        lateinit var connect0: MutableSet<Int>
+        lateinit var pairing0: MutableSet<Int>
+        fun done(c: List<Int>, p: List<Int>) { if (!answered) { answered = true; report(c, p) } }
+        main0.postDelayed({ done(connect0.sorted(), pairing0.sorted()) }, 5000)
         val nsd = ctx.getSystemService(Context.NSD_SERVICE) as NsdManager
         val main = Handler(Looper.getMainLooper())
         val mine = localAddresses()
         val found = mutableListOf<NsdServiceInfo>()
         val connect = mutableSetOf<Int>()
         val pairing = mutableSetOf<Int>()
+        connect0 = connect
+        pairing0 = pairing
         val listeners = mutableListOf<NsdManager.DiscoveryListener>()
         for (type in listOf(CONNECT, PAIRING)) {
             val l = object : NsdManager.DiscoveryListener {
