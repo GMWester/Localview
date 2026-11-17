@@ -27,11 +27,19 @@ jobs:
         run: |
           echo "VERSION=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
+        if: matrix.arch == 'x64'
         with:
           flutter-version: 3.50.0
           channel: stable
-          architecture: ${{ matrix.arch }}
           cache: true
+      - name: Flutter for Windows ARM64 (built from the 3.50.0 tag; no prebuilt arm64 SDK is published)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git C:\flutter
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "C:\flutter\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          C:\flutter\bin\flutter.bat --version
       - run: flutter pub get
       - run: flutter build windows --release --dart-define=LV_MODE=${{ matrix.mode }} --dart-define=LV_VERSION=${{ env.VERSION }}
       - name: Build the SteamVR driver (PC VR, x64 only - SteamVR has no ARM64 version)
