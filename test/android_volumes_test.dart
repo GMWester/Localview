@@ -37,4 +37,24 @@ void main() {
     expect((await req({'op': 'list', 'path': '/self'}))['ok'], isFalse);
     expect((await req({'op': 'list', 'path': '/SD card (1A2B-3C4D)/../..'}))['ok'], isFalse);
   });
+
+  test('volumes reported by Android (StorageManager) are used even when /storage cannot be listed', () async {
+    final tmp = await Directory.systemTemp.createTemp('lv_vol');
+    addTearDown(() => tmp.delete(recursive: true));
+    final internal = await Directory('${tmp.path}/emulated/0/Download').create(recursive: true);
+    final sd = await Directory('${tmp.path}/mnt/media_rw/9C33-6BBD/DCIM').create(recursive: true);
+    final root = androidVolumesRoot([
+      (name: 'Internal storage', path: internal.parent.path),
+      (name: 'SD card (9C33-6BBD)', path: sd.parent.path),
+    ]);
+    // storageDir points nowhere: only the reported volumes can work.
+    final fs = FsServer(root, storageDir: '/nonexistent');
+    Future<Map<String, Object?>> req(Map<String, dynamic> r) async => (await fs.handle(r, Uint8List(0))).$1;
+    List<String> names(Map<String, Object?> res) =>
+        (res['list'] as List).map((e) => (e as Map)['n'] as String).toList()..sort();
+    expect(names(await req({'op': 'list', 'path': '/'})), ['Internal storage', 'SD card (9C33-6BBD)']);
+    expect(names(await req({'op': 'list', 'path': '/SD card (9C33-6BBD)'})), ['DCIM']);
+    expect(names(await req({'op': 'list', 'path': '/Internal storage'})), ['Download']);
+    expect((await req({'op': 'list', 'path': '/SD card (0000-0000)'}))['ok'], isFalse);
+  });
 }

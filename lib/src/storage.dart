@@ -120,6 +120,13 @@ class AppStore extends ChangeNotifier {
 
   /// Root directory shared (null = whole filesystem / all drives on Windows).
   String? fsRoot;
+
+  /// Updates the shared-storage root (e.g. an SD card was inserted); hosting picks it up.
+  void setFsRoot(String? root) {
+    if (root == fsRoot) return;
+    fsRoot = root;
+    notifyListeners();
+  }
   final List<PairedDevice> paired = [];
 
   bool get hasPassword => passwordVerifier != null;
