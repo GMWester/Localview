@@ -1,0 +1,7 @@
+{
+  "alwaysActivate": false,
+  "name": "localview",
+  "directory": "",
+  "resourceOnly": false,
+  "hmd_presence": ["*.*"]
+}

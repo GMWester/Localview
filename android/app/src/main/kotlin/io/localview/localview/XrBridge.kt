@@ -9,7 +9,7 @@ import io.flutter.plugin.common.MethodChannel
  */
 object XrBridge {
     fun handle(activity: FlutterActivity, method: String, args: Map<String, Any?>?, result: MethodChannel.Result): Boolean {
-        if (!method.startsWith("xr.")) return false
+        if (!method.startsWith("xr.") && !method.startsWith("vr.")) return false
         when (method) {
             "xr.available" -> result.success(false)
             else -> result.success(false)

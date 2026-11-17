@@ -9,7 +9,7 @@ class Upnp {
   String? error;
   String? _controlUrl, _service;
 
-  Future<bool> mapPort(int port) async {
+  Future<bool> mapPort(int port, {String protocol = 'TCP'}) async {
     try {
       final loc = await _discover();
       if (loc == null) {
@@ -25,7 +25,7 @@ class Upnp {
       await _soap('AddPortMapping', {
         'NewRemoteHost': '',
         'NewExternalPort': '$port',
-        'NewProtocol': 'TCP',
+        'NewProtocol': protocol,
         'NewInternalPort': '$port',
         'NewInternalClient': local,
         'NewEnabled': '1',
