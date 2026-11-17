@@ -1,5 +1,6 @@
 // Android host/client glue: MediaProjection capture and AccessibilityService
 // gestures live in Kotlin (MainActivity.kt / LocalviewAccessibilityService.kt).
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -13,6 +14,24 @@ import '../files.dart';
 const MethodChannel androidChannel = MethodChannel('localview/android');
 
 class AndroidBridge {
+  /// ADB over Localview: developer options / wireless debugging state and this device's adb ports.
+  static Future<Map<String, Object?>> adbStatus() async {
+    final m = (await androidChannel.invokeMapMethod<String, Object?>('adbStatus')) ?? {};
+    // Classic `adb tcpip`: check whether adbd really listens there.
+    final legacy = m['legacy'] as int?;
+    if (legacy != null) {
+      try {
+        final s = await Socket.connect(InternetAddress.loopbackIPv4, legacy, timeout: const Duration(seconds: 1));
+        s.destroy();
+      } catch (_) {
+        m['legacy'] = null;
+      }
+    }
+    return m;
+  }
+
+  static Future<void> openDeveloperOptions() => androidChannel.invokeMethod('openDeveloperOptions');
+
   /// Shared-storage root listing every mounted volume (internal storage, SD cards, USB drives)
   /// as Android reports them; falls back to scanning /storage.
   static Future<String> storageRoot() async {
