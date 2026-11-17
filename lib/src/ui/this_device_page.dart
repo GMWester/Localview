@@ -340,6 +340,19 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                   await s.save();
                 },
               ),
+              if (Platform.isAndroid)
+                SwitchListTile(
+                  secondary: const Icon(Icons.adb),
+                  title: const Text('ADB over Localview'),
+                  subtitle: const Text('Lets computers connected to this device use adb without a cable, '
+                      'through the encrypted connection. Turn on Wireless debugging in Developer options too.'),
+                  value: s.adbOverLocalview,
+                  onChanged: (v) async {
+                    s.adbOverLocalview = v;
+                    await s.save();
+                    if (v) await AndroidBridge.openDeveloperOptions();
+                  },
+                ),
               if (!Platform.isIOS)
                 SwitchListTile(
                   secondary: const Icon(Icons.cloud_sync_outlined),

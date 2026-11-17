@@ -87,7 +87,8 @@ class AppController extends ChangeNotifier {
       ..onMount = ((sid, name, url, volume) async {
         await mountDrive('host-$sid', name, url, volume);
       })
-      ..onUnmount = ((sid) => unmountDrive('host-$sid'));
+      ..onUnmount = ((sid) => unmountDrive('host-$sid'))
+      ..onAdbInfo = (Platform.isAndroid ? AndroidBridge.adbStatus : null);
     host
       ..rtcCapable = rtcHostSupported && await rtcUsable()
       ..padsCapable = pads != null

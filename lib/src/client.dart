@@ -14,6 +14,7 @@ import 'link.dart';
 import 'net.dart';
 import 'platform/platform.dart';
 import 'protocol.dart';
+import 'tunnel.dart';
 
 String describeError(String code) => switch (code) {
       'bad_password' => 'Wrong password.',
@@ -113,6 +114,29 @@ class ClientSession extends ChangeNotifier {
   bool peerPads = false;
   bool peerVr = false;
 
+  /// The host lets this viewer use its adb through Localview.
+  bool peerAdb = false;
+  int _nextReq = 1;
+  final Map<int, Completer<Object?>> _reqs = {};
+
+  /// ADB over Localview: the host's adb ports ({allowed, wireless, connect, pairing, legacy}).
+  Future<Map<String, dynamic>> adbInfo() async =>
+      ((await _request(['adbInfo']) as Map?) ?? const {}).cast<String, dynamic>();
+
+  /// Forwards 127.0.0.1 (the returned port) on this device to [remotePort] on the host; null on failure.
+  Future<int?> forwardPort(int remotePort) async => await _request(['forward', remotePort]) as int?;
+
+  Future<Object?> _request(List<Object?> m) {
+    final id = _nextReq++;
+    final c = Completer<Object?>();
+    _reqs[id] = c;
+    _toIso?.send([m[0], id, ...m.skip(1)]);
+    return c.future.timeout(const Duration(seconds: 15), onTimeout: () {
+      _reqs.remove(id);
+      return null;
+    });
+  }
+
   /// PC VR control messages from the host.
   void Function(Uint8List msg)? onVr;
 
@@ -183,6 +207,7 @@ class ClientSession extends ChangeNotifier {
         peerRtc = j['rtc'] == true;
         peerPads = j['pads'] == true;
         peerVr = j['vr'] == true;
+        peerAdb = j['adb'] == true;
         newPairKey = j['pairKey'] as Uint8List?;
         ticketId = j['ticketId'] as String?;
         ticketKey = j['ticketKey'] as Uint8List?;
@@ -191,6 +216,8 @@ class ClientSession extends ChangeNotifier {
         status = 'Connected';
         if (!_handshake.isCompleted) _handshake.complete();
         notifyListeners();
+      case 'reqResult':
+        _reqs.remove(m[1] as int)?.complete(m[2]);
       case 'monitors':
         final j = (m[1] as Map).cast<String, Object?>();
         monitors = [for (final x in (j['list'] as List? ?? const [])) MonitorInfo.fromJson(x as Map)];
@@ -310,6 +337,7 @@ Future<void> _clientIsolateMain(List args) async {
         if (sock == null || ch == null || sock.isClosed) return;
         sock.send(await ch.seal(m));
       });
+  final tunnels = TunnelClient(sendMsg);
 
   final decoder = FrameDecoder();
   var dirty = false, waitingShown = false;
@@ -340,6 +368,14 @@ Future<void> _clientIsolateMain(List args) async {
         } catch (e) {
           toMain.send(['fsr', id, {'ok': false, 'err': 'io'}, null]);
         }
+      case 'adbInfo':
+        toMain.send(['reqResult', m[1], await tunnels.adbInfo()]);
+      case 'forward':
+        int? port;
+        try {
+          port = await tunnels.forward(m[2] as int);
+        } catch (_) {}
+        toMain.send(['reqResult', m[1], port]);
       case 'totp':
         final c = totpWaiter;
         totpWaiter = null;
@@ -426,6 +462,7 @@ Future<void> _clientIsolateMain(List args) async {
         'rtc': welcome['rtc'] == true,
         'pads': welcome['pads'] == true,
         'vr': welcome['vr'] == true,
+        'adb': welcome['adb'] == true,
         if (welcome['pairKey'] != null) 'pairKey': base64Decode(welcome['pairKey'] as String),
         if (welcome['ticket'] is Map) 'ticketId': (welcome['ticket'] as Map)['id'],
         if (welcome['ticket'] is Map) 'ticketKey': base64Decode((welcome['ticket'] as Map)['key'] as String),
@@ -443,7 +480,7 @@ Future<void> _clientIsolateMain(List args) async {
     try {
       while (true) {
         final m = await ch.open(await sock.next(timeout: const Duration(seconds: 45)));
-        if (m.isEmpty || link.handle(m)) continue;
+        if (m.isEmpty || link.handle(m) || tunnels.handle(m)) continue;
         switch (m[0]) {
           case Msg.frame:
             decoder.apply(m);
@@ -477,6 +514,7 @@ Future<void> _clientIsolateMain(List args) async {
   } catch (e) {
     if (!closing) toMain.send(['error', '$e']);
   } finally {
+    tunnels.closeAll();
     await link?.close();
     await sock?.close();
     toMain.send(['closed']);

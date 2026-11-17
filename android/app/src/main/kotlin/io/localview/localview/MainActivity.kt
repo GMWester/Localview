@@ -48,6 +48,21 @@ open class MainActivity : FlutterActivity() {
 
     override fun shouldDestroyEngineWithHost(): Boolean = this is ViewerActivity
 
+    /** True unless [apk] is known to be signed with a different key than this app. */
+    private fun sameSigner(apk: String): Boolean = try {
+        fun signers(p: android.content.pm.PackageInfo?): Set<String> = when {
+            p == null -> emptySet()
+            Build.VERSION.SDK_INT >= 28 -> (p.signingInfo?.apkContentsSigners ?: emptyArray()).map { it.toCharsString() }.toSet()
+            else -> @Suppress("DEPRECATION") (p.signatures ?: emptyArray()).map { it.toCharsString() }.toSet()
+        }
+        val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES
+            else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+        val update = signers(packageManager.getPackageArchiveInfo(apk, flags))
+        update.isEmpty() || update == signers(packageManager.getPackageInfo(packageName, flags))
+    } catch (_: Exception) {
+        true
+    }
+
     /** Mounted storage volumes (internal storage, SD cards, USB drives) with their paths. */
     private fun storageVolumes(): List<Map<String, Any?>> {
         val sm = getSystemService(Context.STORAGE_SERVICE) as StorageManager
@@ -152,22 +167,30 @@ open class MainActivity : FlutterActivity() {
                 }
                 "installApk" -> {
                     // In-app update: hand the downloaded APK to the system installer.
-                    if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                    val file = java.io.File(call.argument<String>("path")!!)
+                    if (!sameSigner(file.path)) {
+                        // Android refuses updates signed with another key ("package conflicts").
+                        result.success("signature")
+                    } else if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
                         startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
-                        result.success(false)
+                        result.success("permission")
                     } else {
-                        val file = java.io.File(call.argument<String>("path")!!)
                         val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.updates", file)
                         startActivity(
                             Intent(Intent.ACTION_VIEW)
                                 .setDataAndType(uri, "application/vnd.android.package-archive")
                                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
-                        result.success(true)
+                        result.success("ok")
                     }
                 }
                 "hasAllFilesAccess" -> result.success(hasAllFilesAccess())
                 "storageVolumes" -> result.success(storageVolumes())
+                "adbStatus" -> AdbInfo.status(this) { result.success(it) }
+                "openDeveloperOptions" -> {
+                    try { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) } catch (_: Exception) {}
+                    result.success(null)
+                }
                 "requestAllFilesAccess" -> { requestAllFilesAccess(); result.success(null) }
                 "isTv" -> {
                     val ui = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
