@@ -235,6 +235,10 @@ open class MainActivity : FlutterActivity() {
                     DriveProvider.drives.remove(call.argument<String>("id")!!)
                     notifyRoots(); result.success(null)
                 }
+                "liveTouch" -> result.success(a11y?.supportsLiveTouch == true)
+                "touchDown" -> { a11y?.touchDown(d("x"), d("y")); result.success(a11y != null) }
+                "touchMove" -> { a11y?.touchMove(d("x"), d("y"), false); result.success(a11y != null) }
+                "touchUp" -> { a11y?.touchMove(d("x"), d("y"), true); result.success(a11y != null) }
                 "tap" -> { a11y?.tap(d("x"), d("y"), 60); result.success(a11y != null) }
                 "longPress" -> { a11y?.tap(d("x"), d("y"), 800); result.success(a11y != null) }
                 "swipe" -> {

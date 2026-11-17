@@ -113,6 +113,7 @@ class CaptureService : Service() {
                     }
                 }
                 latest = Frame(iw, ih, out, ++frameCounter)
+                JpegEncoder.onNewFrame()
             } finally {
                 img.close()
             }

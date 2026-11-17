@@ -666,7 +666,7 @@ class _HostSession {
       sw.reset();
       if (_jpeg) {
         // Android: the newest frame, JPEG-compressed natively; nothing is sent while the screen is still.
-        final j = await host.grabJpeg(_jpegSeq, (1920 * scale).round(), 72);
+        final j = await host.grabJpeg(_jpegSeq, (1440 * scale).round(), 70);
         if (_closed) break;
         if (j == null) {
           idleFrames++;
