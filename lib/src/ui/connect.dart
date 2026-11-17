@@ -53,7 +53,17 @@ Future<ClientSession?> connectTo(
   String? err;
   try {
     session = await ClientSession.connect(params,
-        onMount: (url, volume) async => app.mountDrive(key, volume, url, volume).then((_) {}),
+        onMount: (url, volume) async {
+          final where = await app.mountDrive(key, volume, url, volume);
+          final name = session?.peerName ?? volume;
+          if (where != null) {
+            messenger.showSnackBar(SnackBar(content: Text("$name's storage: $where")));
+          } else if (app.store.mountDrives && app.drives.lastError != null) {
+            messenger.showSnackBar(SnackBar(
+                duration: const Duration(seconds: 10),
+                content: Text("Couldn't show $name's storage as a drive: ${app.drives.lastError}")));
+          }
+        },
         onUnmount: () => app.unmountDrive(key),
         askTotp: () async => context.mounted ? askTotpCode(context, paired?.name ?? host) : null);
   } catch (e) {
