@@ -28,12 +28,20 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter build windows --release --dart-define=LV_MODE=${{ matrix.mode }}
+      - name: Build the SteamVR driver (PC VR)
+        shell: pwsh
+        run: |
+          cmake -S vr/driver -B vr/build -A x64
+          cmake --build vr/build --config Release
+          if (!(Test-Path vr\driver\localview\bin\win64\driver_localview.dll)) { throw "driver build failed" }
       - name: Portable zip
         shell: pwsh
         run: |
           $m = "${{ matrix.label }}"
           $dir = "Localview-$m-windows-x64"
           Copy-Item -Recurse build\windows\x64\runner\Release $dir
+          New-Item -ItemType Directory -Force "$dir\vr" | Out-Null
+          Copy-Item -Recurse vr\driver\localview "$dir\vr\localview"
           Rename-Item "$dir\localview.exe" "Localview $m.exe"
           Compress-Archive -Path $dir -DestinationPath "$dir.zip"
       - name: Fetch the ViGEmBus controller driver installer
