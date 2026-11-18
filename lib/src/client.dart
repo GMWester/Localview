@@ -191,6 +191,10 @@ class ClientSession extends ChangeNotifier {
   void Function(String mode, String? error)? onAudioRoute;
   /// The host sends its sound as PCM (Android hosts); [onAudioPcm] receives it.
   bool peerPcmAudio = false;
+
+  /// Android hosts: display off while controlled ('off' with Pro, 'dim' otherwise, 'on').
+  void setScreenPower(bool on) => send(jsonMsg(Msg.screenPower, {'on': on}));
+  void Function(String mode, String? error)? onScreenPower;
   void Function(Uint8List pcm)? onAudioPcm;
   void setAudioRoute(String mode) => send(jsonMsg(Msg.audioRoute, {'mode': mode}));
   void Function(String? error)? onRotateResult;
@@ -292,7 +296,10 @@ class ClientSession extends ChangeNotifier {
         onClipboard?.call(m[1] as String);
       case 'rtc':
         final msg = m[1] as Uint8List;
-        if (msg.isNotEmpty && msg[0] == Msg.audioPcm) {
+        if (msg.isNotEmpty && msg[0] == Msg.screenPowerResult) {
+          final j = jsonBody(msg);
+          onScreenPower?.call(j['mode'] as String? ?? 'on', j['error'] as String?);
+        } else if (msg.isNotEmpty && msg[0] == Msg.audioPcm) {
           onAudioPcm?.call(Uint8List.sublistView(msg, 1));
         } else if (msg.isNotEmpty && msg[0] == Msg.audioRouteResult) {
           final j = jsonBody(msg);
