@@ -47,6 +47,68 @@ Future<String> installAdb() async {
   }
 }
 
+/// True if [host] is an address on the local network, where adb can reach the device's wireless
+/// debugging port directly (faster and more reliable than through the encrypted session).
+bool isLanHost(String host) {
+  final a = InternetAddress.tryParse(host);
+  if (a == null || a.isLoopback) return false;
+  if (a.type == InternetAddressType.IPv4) {
+    final b = a.rawAddress;
+    return b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] < 32) || (b[0] == 192 && b[1] == 168) || (b[0] == 169 && b[1] == 254);
+  }
+  return a.isLinkLocal || (a.rawAddress[0] & 0xFE) == 0xFC; // fe80::/10, fc00::/7
+}
+
+Future<String> _adbOut(String adb, List<String> args, {Duration timeout = const Duration(seconds: 15)}) async {
+  try {
+    final r = await Process.run(adb, args).timeout(timeout);
+    return '${r.stdout}${r.stderr}'.trim();
+  } catch (e) {
+    return '$e';
+  }
+}
+
+/// Connects adb to [target] (ip:port); retries once after dropping a stale ("offline") entry.
+Future<bool> adbConnect(String adb, String target) async {
+  var out = await _adbOut(adb, ['connect', target]);
+  if (out.contains('connected to') && !out.contains('failed')) {
+    final state = await _adbOut(adb, ['-s', target, 'get-state'], timeout: const Duration(seconds: 5));
+    if (state.trim() == 'device') return true;
+  }
+  await _adbOut(adb, ['disconnect', target]);
+  out = await _adbOut(adb, ['connect', target]);
+  return out.contains('connected to') && !out.contains('failed');
+}
+
+/// Localview Pro: connects adb to the controlled Android device (directly over the local network
+/// when possible, otherwise through Localview) and starts the real mouse & keyboard helper.
+/// Returns null when there was nothing to do (no adb, not a Pro device, already running, not
+/// paired yet...), else a short message.
+Future<String?> autoStartPro(ClientSession s) async {
+  final adb = await findAdbAnywhere();
+  if (adb == null || !s.peerAdb) return null;
+  final info = await s.adbInfo();
+  final cmd = info['proCommand'] as String?;
+  if (cmd == null || info['proRunning'] == true) return null;
+  final ports = [...(info['connect'] as List? ?? const []).cast<int>(), if (info['legacy'] != null) info['legacy'] as int];
+  if (ports.isEmpty) return null; // wireless debugging is off
+  final targets = <String>[
+    if (isLanHost(s.params.host)) '${s.params.host}:${ports.first}',
+  ];
+  final local = await s.forwardPort(ports.first);
+  if (local != null) targets.add('127.0.0.1:$local');
+  for (final t in targets) {
+    if (!await adbConnect(adb, t)) continue;
+    await _adbOut(adb, ['-s', t, 'shell', cmd]);
+    for (var i = 0; i < 6; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if ((await s.adbInfo())['proRunning'] == true) return 'Real mouse & keyboard started on ${s.peerName}.';
+    }
+    return null;
+  }
+  return null; // not paired with this computer yet: the ADB dialog does that once
+}
+
 /// Stops every adb server on this computer (`adb kill-server`, then any adb process left over,
 /// e.g. from another adb copy). Returns a short report.
 Future<String> stopAdbServers() async {
@@ -126,6 +188,16 @@ class _AdbDialogState extends State<_AdbDialog> {
   String? _adb = Platform.isWindows || Platform.isLinux || Platform.isMacOS ? findAdb() : null;
   bool _installing = false;
   bool _late = false;
+  int? _connectPort, _pairPort; // the device's own adb ports
+
+  /// Same network: adb talks to the device directly (faster, and works when the tunnel doesn't).
+  bool get _lan => isLanHost(s.params.host);
+  String? get _target => _lan && _connectPort != null
+      ? '${s.params.host}:$_connectPort'
+      : (_connectLocal != null ? '127.0.0.1:$_connectLocal' : null);
+  String? get _pairTarget => _lan && _pairPort != null
+      ? '${s.params.host}:$_pairPort'
+      : (_pairLocal != null ? '127.0.0.1:$_pairLocal' : null);
 
   ClientSession get s => widget.session;
 
@@ -172,16 +244,21 @@ class _AdbDialogState extends State<_AdbDialog> {
       _info = info;
       _connectLocal = c;
       _pairLocal = p;
+      _connectPort = connect.isEmpty ? null : connect.first;
+      _pairPort = pairing.isEmpty ? null : pairing.first;
       _busy = false;
     });
     // adb is here and the device is ready: connect right away.
-    if (c != null && _adb != null && _output == null) await _run(['connect', '127.0.0.1:$c']);
+    final t = _target;
+    if (t != null && _adb != null && _output == null) await _run(['connect', t]);
   }
 
   /// Starts the helper, then shows its log (read through adb, so it works even while the
   /// device answers slowly) and refreshes the status.
   Future<void> _startPro(String command, String? log) async {
-    final dev = '127.0.0.1:$_connectLocal';
+    final dev = _target!;
+    final adb = _adb;
+    if (adb != null) await adbConnect(adb, dev);
     await _run(['-s', dev, 'shell', command]);
     final started = _output ?? '';
     await Future<void>.delayed(const Duration(seconds: 2));
@@ -241,12 +318,12 @@ class _AdbDialogState extends State<_AdbDialog> {
       body = [
         if (i['developerOptions'] != true)
           Text('On $name, turn on Developer options: Settings → About → tap "Build number" 7 times.'),
-        if (_connectLocal == null && i['developerOptions'] == true)
+        if (_target == null && i['developerOptions'] == true)
           Text(sdk >= 30
               ? 'On $name: Settings → Developer options → turn on "Wireless debugging" (needs Wi-Fi on $name), then Refresh.'
               : '$name (Android ${sdk > 0 ? 'API $sdk' : ''}) has no wireless debugging. If "Network debugging" / ADB over network '
                   'exists in its Developer options, turn it on (port 5555), then Refresh.'),
-        if (_pairLocal != null) ...[
+        if (_pairTarget != null) ...[
           const SizedBox(height: 8),
           const Text('Pair this computer (first time only): enter the 6-digit code shown on the device.'),
           if (_adb != null)
@@ -261,25 +338,27 @@ class _AdbDialogState extends State<_AdbDialog> {
               ),
               const SizedBox(width: 12),
               FilledButton(
-                onPressed: _busy ? null : () => _run(['pair', '127.0.0.1:$_pairLocal', _code.text.trim()]),
+                onPressed: _busy ? null : () => _run(['pair', _pairTarget!, _code.text.trim()]),
                 child: const Text('Pair'),
               ),
             ])
           else
-            _command('adb pair 127.0.0.1:$_pairLocal <code>'),
-        ] else if (_connectLocal != null && sdk >= 30) ...[
+            _command('adb pair $_pairTarget <code>'),
+        ] else if (_target != null && sdk >= 30) ...[
           const SizedBox(height: 8),
           Text('First time from this computer? On $name: Wireless debugging → "Pair device with pairing code", then Refresh.'),
         ],
-        if (_connectLocal != null) ...[
+        if (_target != null) ...[
           const SizedBox(height: 12),
-          Text('adb reaches $name at 127.0.0.1:$_connectLocal on this computer (through Localview, end-to-end encrypted):'),
-          _command('adb connect 127.0.0.1:$_connectLocal'),
+          Text(_lan
+              ? 'adb reaches $name directly on your local network at $_target:'
+              : 'adb reaches $name at $_target on this computer (through Localview, end-to-end encrypted):'),
+          _command('adb connect $_target'),
           if (_adb != null)
             Align(
               alignment: Alignment.centerLeft,
               child: FilledButton.tonal(
-                onPressed: _busy ? null : () => _run(['connect', '127.0.0.1:$_connectLocal']),
+                onPressed: _busy ? null : () => _run(['connect', _target!]),
                 child: const Text('Connect adb'),
               ),
             ),
@@ -297,7 +376,7 @@ class _AdbDialogState extends State<_AdbDialog> {
             Text('Starts a small helper on $name that sends real mouse and keyboard events (hover, right-click, '
                 'wheel, shortcuts). Start it again after $name restarts.'),
             const SizedBox(height: 8),
-            if (_adb != null && _connectLocal != null)
+            if (_adb != null && _target != null)
               FilledButton(
                 onPressed: _busy
                     ? null
@@ -305,7 +384,7 @@ class _AdbDialogState extends State<_AdbDialog> {
                 child: const Text('Start real mouse & keyboard'),
               )
             else
-              _command('adb -s 127.0.0.1:${_connectLocal ?? '<port>'} shell "${i['proCommand']}"'),
+              _command('adb -s ${_target ?? '<ip:port>'} shell "${i['proCommand']}"'),
             const SizedBox(height: 8),
             Text('If that says "device offline": connect adb to $name directly over Wi-Fi (Wireless debugging shows '
                 'its IP address & port: adb pair <ip:pairing port> <code>, then adb connect <ip:port>) and run:',
