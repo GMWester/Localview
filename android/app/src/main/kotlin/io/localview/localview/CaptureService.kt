@@ -17,8 +17,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
-import android.util.DisplayMetrics
-import android.view.WindowManager
 
 /** Foreground service that mirrors the screen into an ImageReader (MediaProjection). */
 class CaptureService : Service() {
@@ -93,11 +91,9 @@ class CaptureService : Service() {
 
     /** Current screen size (follows rotation), scaled to at most MAX_SIDE, even numbers. */
     private fun captureSize(): Pair<Int, Int> {
-        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(metrics)
-        val sw = metrics.widthPixels
-        val sh = metrics.heightPixels
+        // Rotation-checked: a stale portrait size here gave horizontal screens black bars, and
+        // clicks then landed in the wrong places.
+        val (sw, sh) = DisplaySize.currentInt(this)
         val scale = minOf(1.0, MAX_SIDE.toDouble() / maxOf(sw, sh))
         return Pair(((sw * scale).toInt() / 2) * 2, ((sh * scale).toInt() / 2) * 2)
     }
