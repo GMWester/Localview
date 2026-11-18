@@ -85,7 +85,12 @@ class DiscoveryScanner extends ChangeNotifier {
     final s = _sock;
     if (s == null) return;
     final q = utf8.encode(jsonEncode({'lv': 1, 'q': 1, 'mode': kModeName}));
-    final targets = <InternetAddress>{InternetAddress('255.255.255.255')};
+    final targets = <InternetAddress>{
+      InternetAddress('255.255.255.255'),
+      // Devices already listed are asked directly every round: phones often drop broadcasts
+      // to save power, and one missed answer shouldn't make them vanish.
+      for (final d in devices.values) InternetAddress(d.address),
+    };
     final sweep = _round++ % 3 == 0;
     try {
       for (final ni in await NetworkInterface.list(type: InternetAddressType.IPv4)) {
@@ -108,7 +113,7 @@ class DiscoveryScanner extends ChangeNotifier {
     }
     final now = DateTime.now();
     final before = devices.length;
-    devices.removeWhere((_, d) => now.difference(d.lastSeen) > const Duration(seconds: 12));
+    devices.removeWhere((_, d) => now.difference(d.lastSeen) > kDiscoveryExpiry);
     if (devices.length != before) notifyListeners();
   }
 
@@ -119,6 +124,9 @@ class DiscoveryScanner extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// A device leaves the Nearby list after this long without an answer (about 6 missed rounds).
+const kDiscoveryExpiry = Duration(seconds: 20);
 
 abstract final class Uint8ListHelper {
   static Uint8List of(List<int> l) => Uint8List.fromList(l);

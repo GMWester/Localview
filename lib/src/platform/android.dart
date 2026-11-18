@@ -27,6 +27,8 @@ class AndroidBridge {
       if (pro['pro'] == true) {
         m['proCommand'] = pro['command'];
         m['proRunning'] = pro['running'] == true;
+        m['proError'] = pro['error'];
+        m['proLog'] = pro['log'];
       }
     } catch (_) {}
     // Classic `adb tcpip`: check whether adbd really listens there.
