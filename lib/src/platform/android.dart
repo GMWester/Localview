@@ -84,6 +84,10 @@ class AndroidBridge {
 
   /// Switches the screen to 'portrait', 'landscape' or 'auto'. Returns 'permission' when the
   /// user still has to allow "Modify system settings" (that screen is opened), other errors, or null.
+  /// Display off (Localview Pro) or dimmed (fallback) while controlled; {mode, error?}.
+  static Future<Map<String, Object?>> screenPower(bool on) async =>
+      (await androidChannel.invokeMapMethod<String, Object?>('screenPower', {'on': on})) ?? const {'mode': 'on'};
+
   /// Phone sound for the controlling device (Android 10+): PCM s16le, stereo, 48 kHz.
   static Future<bool> audioSupported() async => await androidChannel.invokeMethod<bool>('audioSupported') ?? false;
   static Future<String?> audioStart({required bool silence}) =>
