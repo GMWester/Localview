@@ -621,7 +621,25 @@ class _ProTileState extends State<_ProTile> {
               ? '${st['error']}. Computers use touch input meanwhile.'
               : 'Turn on "ADB over Localview" and Wireless debugging, then on the computer: '
               '⋮ → ADB (wireless debugging)… → Start real mouse & keyboard. Needed again after a restart.'),
-      trailing: IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _load),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(tooltip: 'Stop helpers', icon: const Icon(Icons.stop_circle_outlined), onPressed: _stop),
+        IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _load),
+      ]),
     );
+  }
+
+  /// Asks the helper to stop itself and every other (also older) helper still running.
+  Future<void> _stop() async {
+    bool ok = false;
+    try {
+      ok = await androidChannel.invokeMethod<bool>('pro.stop') ?? false;
+    } catch (_) {}
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok
+            ? 'Stopped the real mouse & keyboard helpers.'
+            : 'No helper answered. Helpers from Localview 1.9.3 or older can\'t be reached by the app: restart the device, '
+                'or start the helper once from the computer (a new start stops the old ones).')));
+    await _load();
   }
 }

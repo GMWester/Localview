@@ -283,6 +283,11 @@ class _AdbDialogState extends State<_AdbDialog> {
               )
             else
               _command('adb -s 127.0.0.1:${_connectLocal ?? '<port>'} shell "${i['proCommand']}"'),
+            const SizedBox(height: 8),
+            Text('If that says "device offline": connect adb to $name directly over Wi-Fi (Wireless debugging shows '
+                'its IP address & port: adb pair <ip:pairing port> <code>, then adb connect <ip:port>) and run:',
+                style: const TextStyle(fontSize: 12)),
+            _command('adb -s <ip:port> shell "${i['proCommand']}"'),
           ],
         ],
         if (_adb == null && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) ...[
