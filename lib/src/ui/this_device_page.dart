@@ -617,7 +617,9 @@ class _ProTileState extends State<_ProTile> {
       title: Text('Real mouse & keyboard: ${running ? 'on' : 'off'}'),
       subtitle: Text(running
           ? 'Computers controlling this device send real mouse and keyboard events.'
-          : 'Turn on "ADB over Localview" and Wireless debugging, then on the computer: '
+          : st['error'] != null
+              ? '${st['error']}. Computers use touch input meanwhile.'
+              : 'Turn on "ADB over Localview" and Wireless debugging, then on the computer: '
               '⋮ → ADB (wireless debugging)… → Start real mouse & keyboard. Needed again after a restart.'),
       trailing: IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _load),
     );
