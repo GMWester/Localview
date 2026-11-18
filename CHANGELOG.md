@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.4
+
+- **Fixed: Localview Pro's real mouse & keyboard never turned on**: the helper listened on a kind of local socket that Android's security rules (SELinux) don't let normal apps open, so the app could never reach it and kept saying "off" even while the helper ran. The helper now listens on 127.0.0.1 (TCP), which apps may connect to. After updating, start the helper again from the computer; it replaces the old one.
+- **Stop helpers button** (Localview Pro): *This device → Real mouse & keyboard* has a stop button that ends every real mouse & keyboard helper still running on the device. Starting the helper also stops older copies first, so they no longer pile up (or block the new one with "already running"). Helpers from 1.9.3 and older can't be reached by the app: restart the device once or start the new helper from the computer.
+- **ADB dialog**: always shows the helper's start command with a copy button, including how to run it with adb connected directly over Wi-Fi when the connection through Localview says "device offline".
+- ADB over Localview: a new connection is registered on the device before the computer is told it is open.
+
 ## 1.9.3
 
 - **Fixed: Android devices disappearing and reappearing in Nearby**: Android drops network broadcasts to save power, and Localview only kept them let through while its window was open, so a phone running in the background (or with the screen off) missed most discovery questions. Localview now keeps Wi-Fi discovery working, and Wi-Fi in low-latency mode, for as long as it runs, also in the background. Computers also ask devices they already list directly every 3 seconds instead of relying on broadcasts, and only remove a device after 20 seconds without an answer (was 12).
