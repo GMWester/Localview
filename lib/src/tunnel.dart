@@ -124,8 +124,10 @@ class TunnelHost extends _Ends {
     try {
       final s = await Socket.connect(InternetAddress.loopbackIPv4, port, timeout: const Duration(seconds: 5));
       s.setOption(SocketOption.tcpNoDelay, true);
-      await send(_json(TunnelMsg.result, {'id': id, 'ok': true}));
+      // Registered before the viewer hears "ok", so its first bytes (adb's handshake) can't
+      // arrive for a connection that isn't known yet and be dropped.
       _pump(id, s);
+      await send(_json(TunnelMsg.result, {'id': id, 'ok': true}));
     } catch (e) {
       await send(_json(TunnelMsg.result, {'id': id, 'ok': false, 'err': 'refused'}));
     }
