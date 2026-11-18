@@ -107,6 +107,13 @@ class _RemotePageState extends State<RemotePage> {
         if (ok && mounted) _startGameMode();
       });
     }
+    // Localview Pro: start real mouse & keyboard by itself (adb straight over the local network);
+    // silent when there is nothing to do or this computer isn't paired with the device yet.
+    if (s.peerOs == 'android' && s.peerAdb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      autoStartPro(s).then((m) {
+        if (m != null && mounted) _snack(m);
+      }).catchError((_) {});
+    }
     if (s.peerVr) {
       PcvrClient.available().then((v) {
         if (mounted) setState(() => _pcvrAvailable = v);
