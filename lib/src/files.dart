@@ -323,6 +323,21 @@ class FsClient {
       raw({'op': 'copy', 'path': a, 'to': b, 'overwrite': overwrite});
 }
 
+/// Content type from the file name, so players and viewers know what they open.
+String mimeTypeFor(String name) {
+  final dot = name.lastIndexOf('.');
+  final ext = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+  return const {
+        'mp4': 'video/mp4', 'm4v': 'video/mp4', 'mkv': 'video/x-matroska', 'webm': 'video/webm', 'mov': 'video/quicktime',
+        '3gp': 'video/3gpp', 'avi': 'video/x-msvideo', 'ts': 'video/mp2t',
+        'mp3': 'audio/mpeg', 'm4a': 'audio/mp4', 'aac': 'audio/aac', 'ogg': 'audio/ogg', 'opus': 'audio/ogg', 'wav': 'audio/wav', 'flac': 'audio/flac',
+        'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp', 'heic': 'image/heic',
+        'heif': 'image/heif', 'dng': 'image/x-adobe-dng', 'bmp': 'image/bmp',
+        'pdf': 'application/pdf', 'txt': 'text/plain', 'zip': 'application/zip', 'apk': 'application/vnd.android.package-archive',
+      }[ext] ??
+      'application/octet-stream';
+}
+
 /// Loopback WebDAV server exposing the peer's storage so the OS can mount it
 /// as a drive (Windows mapped drive, macOS Finder volume, Linux GVfs, Android
 /// Storage Access Framework). Only reachable from 127.0.0.1 and only under a
@@ -386,7 +401,7 @@ class DavServer {
     return '<D:response><D:href>${_xml(_href(virt, e.isDir))}</D:href><D:propstat><D:prop>'
         '<D:displayname>${_xml(name)}</D:displayname>'
         '<D:resourcetype>${e.isDir ? '<D:collection/>' : ''}</D:resourcetype>'
-        '${e.isDir ? '' : '<D:getcontentlength>${e.size}</D:getcontentlength><D:getcontenttype>application/octet-stream</D:getcontenttype>'}'
+        '${e.isDir ? '' : '<D:getcontentlength>${e.size}</D:getcontentlength><D:getcontenttype>${mimeTypeFor(e.name)}</D:getcontenttype>'}'
         '<D:getlastmodified>${_httpDate(e.mtime)}</D:getlastmodified>'
         '<D:creationdate>${e.mtime.toUtc().toIso8601String()}</D:creationdate>'
         '<D:getetag>"${e.mtime.millisecondsSinceEpoch.toRadixString(16)}-${e.size.toRadixString(16)}"</D:getetag>'
@@ -476,15 +491,20 @@ class DavServer {
           }
           res.headers.set('Accept-Ranges', 'bytes');
           res.headers.set('Last-Modified', _httpDate(st.mtime));
-          res.headers.contentType = ContentType('application', 'octet-stream');
+          res.headers.contentType = ContentType.parse(mimeTypeFor(v));
           res.contentLength = st.size == 0 ? 0 : end - start + 1;
           if (req.method == 'GET') {
+            // Read-ahead: the next chunk is already on its way from the device while this one
+            // is sent, so videos and big files stream at network speed instead of stop-and-go.
             var off = start;
-            while (off <= end) {
-              final b = await fs.read(v, off, min(kFsChunk, end - off + 1));
+            Future<Uint8List>? next = off <= end ? fs.read(v, off, min(kFsChunk, end - off + 1)) : null;
+            while (next != null) {
+              final b = await next;
               if (b.isEmpty) break;
+              final after = off + b.length;
+              next = after <= end ? fs.read(v, after, min(kFsChunk, end - after + 1)) : null;
               res.add(b);
-              off += b.length;
+              off = after;
               await res.flush();
             }
           }
