@@ -4,6 +4,42 @@ import 'package:flutter/foundation.dart';
 
 import 'android.dart';
 
+const _webClientKey = r'HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters';
+
+/// Windows' WebDAV client refuses files over 50 MB by default ("file size exceeds the limit"),
+/// which breaks videos on device drives. True when the limit is already raised (or not Windows).
+Future<bool> webClientAllowsLargeFiles() async {
+  if (!Platform.isWindows) return true;
+  try {
+    final r = await Process.run('reg', ['query', _webClientKey, '/v', 'FileSizeLimitInBytes']);
+    final m = RegExp(r'0x([0-9a-fA-F]+)').firstMatch('${r.stdout}');
+    if (m == null) return false; // not set: the 50 MB default applies
+    return int.parse(m.group(1)!, radix: 16) >= 0xFFFFFFFF;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Raises the limit to 4 GB (the most Windows allows) and restarts the WebClient service.
+/// Windows asks for administrator permission. Returns null on success, else the reason.
+Future<String?> allowLargeFilesOnDrives() async {
+  if (!Platform.isWindows) return null;
+  const script = 'reg add "$_webClientKey" /v FileSizeLimitInBytes /t REG_DWORD /d 4294967295 /f; '
+      'Restart-Service WebClient -Force -ErrorAction SilentlyContinue';
+  try {
+    final r = await Process.run('powershell', [
+      '-NoProfile',
+      '-Command',
+      "Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-Command','${script.replaceAll("'", "''")}'",
+    ]);
+    if (await webClientAllowsLargeFiles()) return null;
+    final err = '${r.stderr}'.trim();
+    return err.isEmpty ? 'Windows did not allow the change (administrator permission declined?).' : err;
+  } catch (e) {
+    return '$e';
+  }
+}
+
 /// Mounts a peer's storage (served on a loopback WebDAV URL) as a drive in the
 /// OS file manager.
 class DriveMounter {

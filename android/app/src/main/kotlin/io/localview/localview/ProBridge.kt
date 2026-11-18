@@ -192,15 +192,7 @@ object ProBridge {
         }
     }
 
-    private fun screen(ctx: Context): Pair<Float, Float> {
-        val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        return if (Build.VERSION.SDK_INT >= 30) {
-            val b = wm.maximumWindowMetrics.bounds; Pair(b.width().toFloat(), b.height().toFloat())
-        } else {
-            val m = DisplayMetrics(); @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(m)
-            Pair(m.widthPixels.toFloat(), m.heightPixels.toFloat())
-        }
-    }
+    private fun screen(ctx: Context): Pair<Float, Float> = DisplaySize.current(ctx)
 
     private fun px(ctx: Context, args: Map<String, Any?>?): String {
         val (w, h) = screen(ctx)

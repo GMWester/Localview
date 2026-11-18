@@ -1,14 +1,11 @@
 package io.localview.localview
 
-import android.os.Handler
-import android.os.HandlerThread
 import android.view.Surface
 import com.cloudwebrtc.webrtc.FlutterWebRTCPlugin
 import com.cloudwebrtc.webrtc.StateProvider
 import com.cloudwebrtc.webrtc.utils.EglUtils
 import com.cloudwebrtc.webrtc.video.LocalVideoTrack
 import org.webrtc.SurfaceTextureHelper
-import org.webrtc.VideoFrame
 import org.webrtc.VideoSource
 
 /**
@@ -20,10 +17,6 @@ object RtcScreen {
     private var helper: SurfaceTextureHelper? = null
     private var surface: Surface? = null
     private var source: VideoSource? = null
-    private var idle: HandlerThread? = null
-    @Volatile private var lastFrameAt = 0L
-    @Volatile private var lastCopy: VideoFrame? = null
-    @Volatile private var lastCopyAt = 0L
 
     @Synchronized
     fun start(): Map<String, Any?> {
@@ -41,44 +34,14 @@ object RtcScreen {
         h.setTextureSize(w, hh)
         val observer = src.capturerObserver
         observer.onCapturerStarted(true)
-        h.startListening { frame ->
-            val now = System.nanoTime()
-            lastFrameAt = now
-            observer.onFrameCaptured(frame)
-            // A CPU copy now and then, re-sent while the screen is still, so a viewer that
-            // (re)joins or lost a packet gets a picture without waiting for the screen to change.
-            if (now - lastCopyAt > 400_000_000L) {
-                lastCopyAt = now
-                val copy = try { frame.buffer.toI420() } catch (_: Exception) { null }
-                if (copy != null) {
-                    val old = lastCopy
-                    lastCopy = VideoFrame(copy, frame.rotation, now)
-                    old?.release()
-                }
-            }
-        }
+        // Frames go straight to the encoder. While the screen is still, WebRTC's screen-share mode
+        // repeats the last frame itself (an older copy re-sent here showed stale pictures).
+        h.startListening { frame -> observer.onFrameCaptured(frame) }
         val s = Surface(h.surfaceTexture)
         svc.useSurface(s) { nw, nh -> h.setTextureSize(nw, nh) }
         helper = h
         surface = s
         source = src
-        lastFrameAt = System.nanoTime()
-
-        val t = HandlerThread("localview-rtc-idle").apply { start() }
-        idle = t
-        val ih = Handler(t.looper)
-        ih.post(object : Runnable {
-            override fun run() {
-                if (idle !== t) return
-                val f = lastCopy
-                if (f != null && System.nanoTime() - lastFrameAt > 500_000_000L) {
-                    f.retain()
-                    observer.onFrameCaptured(VideoFrame(f.buffer, f.rotation, System.nanoTime()))
-                    f.release()
-                }
-                ih.postDelayed(this, 500)
-            }
-        })
 
         val trackId = state.nextTrackUUID
         val streamId = state.nextStreamUUID
@@ -106,12 +69,8 @@ object RtcScreen {
     fun stop() {
         val h = helper ?: return
         CaptureService.instance?.useSurface(null, null)
-        idle?.quitSafely()
-        idle = null
         try { h.stopListening() } catch (_: Exception) {}
         try { source?.capturerObserver?.onCapturerStopped() } catch (_: Exception) {}
-        lastCopy?.release()
-        lastCopy = null
         surface?.release()
         h.dispose()
         helper = null
