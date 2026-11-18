@@ -37,6 +37,8 @@ import java.lang.reflect.Method
  *   k keycode down        Android key code (modifiers are tracked for meta state)
  *   t base64              text through the virtual keyboard; replies "ok" or "no" (unmappable)
  *   p                     ping; replies "pong <injected> <refused> <base64 last error>"
+ *   d on                  screen panel on (1) / off (0) while the picture keeps being captured; replies
+ *                         "ok" or "no <base64 error>" (the power button also turns it back on)
  *   q                     replies "bye", stops every other helper (old versions too), then exits
  *   audio                 (Android 12+) replies "ok", then streams the device's whole sound output as
  *                         PCM s16le stereo 48 kHz until the connection closes, or replies "no". While
@@ -119,10 +121,15 @@ object ProInputServer {
                         "s" -> scroll(p[1].toFloat(), p[2].toFloat(), p[3].toFloat(), p[4].toFloat())
                         "k" -> key(p[1].toInt(), p[2] == "1")
                         "t" -> out.write((if (text(String(Base64.decode(p[1], Base64.DEFAULT)))) "ok\n" else "no\n").toByteArray())
+                        "d" -> {
+                            val err = ProScreen.set(p[1] == "1")
+                            out.write((if (err == null) "ok\n" else "no ${Base64.encodeToString(err.toByteArray(), Base64.NO_WRAP)}\n").toByteArray())
+                        }
                         "q" -> {
                             out.write("bye\n".toByteArray())
                             out.flush()
                             stopOthers()
+                            ProScreen.set(true)
                             System.exit(0)
                         }
                         "p" -> out.write("pong $injected $refused ${Base64.encodeToString(lastError.toByteArray(), Base64.NO_WRAP)}\n".toByteArray())
@@ -305,5 +312,73 @@ object ProAudio {
             try { r.stop() } catch (_: Exception) {}
             r.release()
         }
+    }
+}
+
+/**
+ * Turns the device's display panel off (or on) while apps keep drawing, so screen capture
+ * continues: the picture only shows on the controlling computer and the device runs cooler.
+ * The same calls scrcpy uses; they need the shell user's privileges.
+ */
+@SuppressLint("PrivateApi", "DiscouragedPrivateApi", "BlockedPrivateApi")
+object ProScreen {
+    private val sc: Class<*> by lazy { Class.forName("android.view.SurfaceControl") }
+
+    private val displayControl: Class<*>? by lazy {
+        if (Build.VERSION.SDK_INT < 34) return@lazy null
+        try {
+            // Android 14+: the display tokens live in the system server's DisplayControl.
+            val factory = Class.forName("com.android.internal.os.ClassLoaderFactory")
+            val create = factory.getDeclaredMethod("createClassLoader", String::class.java, String::class.java, String::class.java,
+                ClassLoader::class.java, Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType, String::class.java)
+            val cp = android.system.Os.getenv("SYSTEMSERVERCLASSPATH")
+            val loader = create.invoke(null, cp, null, null, ClassLoader.getSystemClassLoader(), 0, true, null) as ClassLoader
+            val c = loader.loadClass("com.android.server.display.DisplayControl")
+            val load = Runtime::class.java.getDeclaredMethod("loadLibrary0", Class::class.java, String::class.java)
+            load.isAccessible = true
+            load.invoke(Runtime.getRuntime(), c, "android_servers")
+            c
+        } catch (t: Throwable) {
+            System.err.println("DisplayControl: $t")
+            null
+        }
+    }
+
+    private fun tokens(): List<android.os.IBinder> {
+        val dc = displayControl
+        if (dc != null) {
+            val ids = dc.getMethod("getPhysicalDisplayIds").invoke(null) as LongArray
+            val tok = dc.getMethod("getPhysicalDisplayToken", Long::class.javaPrimitiveType)
+            return ids.mapNotNull { tok.invoke(null, it) as? android.os.IBinder }
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            try {
+                val ids = sc.getMethod("getPhysicalDisplayIds").invoke(null) as LongArray
+                val tok = sc.getMethod("getPhysicalDisplayToken", Long::class.javaPrimitiveType)
+                return ids.mapNotNull { tok.invoke(null, it) as? android.os.IBinder }
+            } catch (_: NoSuchMethodException) {}
+        }
+        val t = try {
+            sc.getMethod("getInternalDisplayToken").invoke(null)
+        } catch (_: NoSuchMethodException) {
+            sc.getMethod("getBuiltInDisplay", Int::class.javaPrimitiveType).invoke(null, 0)
+        }
+        return listOfNotNull(t as? android.os.IBinder)
+    }
+
+    /** null on success, else the reason. */
+    @Synchronized
+    fun set(on: Boolean): String? = try {
+        val m = sc.getMethod("setDisplayPowerMode", android.os.IBinder::class.java, Int::class.javaPrimitiveType)
+        val all = tokens()
+        if (all.isEmpty()) "no display found"
+        else {
+            for (t in all) m.invoke(null, t, if (on) 2 /* POWER_MODE_NORMAL */ else 0 /* POWER_MODE_OFF */)
+            null
+        }
+    } catch (t: Throwable) {
+        val c = (t as? java.lang.reflect.InvocationTargetException)?.targetException ?: t
+        System.err.println("screen power: $c")
+        c.toString()
     }
 }

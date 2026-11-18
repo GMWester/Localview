@@ -31,6 +31,7 @@ class CaptureService : Service() {
         @Volatile var latest: Frame? = null
         @Volatile var running = false
         @Volatile var activeProjection: MediaProjection? = null
+        @Volatile var instance: CaptureService? = null
         private var frameCounter = 0L
         const val MAX_SIDE = 1920
     }
@@ -71,6 +72,7 @@ class CaptureService : Service() {
         val p = mpm.getMediaProjection(code, data) ?: run { stopSelf(); return START_NOT_STICKY }
         projection = p
         activeProjection = p
+        instance = this
         p.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() { stopSelf() }
         }, handler)
@@ -139,6 +141,15 @@ class CaptureService : Service() {
             val (w, h) = captureSize()
             if (w == captureW && h == captureH) return
             val vd = display ?: return
+            val ext = external
+            if (ext != null) {
+                // Game mode: the screen goes to the video encoder; just follow the new size.
+                captureW = w
+                captureH = h
+                externalResize?.invoke(w, h)
+                vd.resize(w, h, resources.displayMetrics.densityDpi)
+                return
+            }
             val old = reader
             val r = newReader(w, h)
             vd.resize(w, h, resources.displayMetrics.densityDpi)
@@ -147,7 +158,36 @@ class CaptureService : Service() {
         }
     }
 
+    // Game mode (WebRTC video): the screen is drawn into the encoder's surface instead of the
+    // ImageReader. Same MediaProjection, so no second "start recording" prompt.
+    private var external: android.view.Surface? = null
+    private var externalResize: ((Int, Int) -> Unit)? = null
+
+    /** Current capture size. */
+    fun size(): Pair<Int, Int> = Pair(captureW, captureH)
+
+    /** Sends the screen to [s] (null: back to the ImageReader); [onResize] follows rotation. */
+    fun useSurface(s: android.view.Surface?, onResize: ((Int, Int) -> Unit)?) {
+        handler.post {
+            val vd = display ?: return@post
+            external = s
+            externalResize = onResize
+            if (s != null) {
+                vd.surface = s
+            } else {
+                // Back to still images, at the current size (the screen may have turned meanwhile).
+                val old = reader
+                val r = newReader(captureW, captureH)
+                vd.resize(captureW, captureH, resources.displayMetrics.densityDpi)
+                vd.surface = r.surface
+                old?.close()
+                latest = null
+            }
+        }
+    }
+
     override fun onDestroy() {
+        instance = null
         try { (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).unregisterDisplayListener(displayListener) } catch (_: Exception) {}
         running = false
         latest = null
