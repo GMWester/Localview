@@ -170,6 +170,13 @@ object ProBridge {
         }
     }
 
+    /** Display panel off/on through the helper; null on success, else the reason ("not running" if absent). */
+    fun screenPower(ctx: Context, on: Boolean): String? {
+        val r = ask(ctx, "d ${if (on) 1 else 0}") ?: return "not running"
+        if (r == "ok") return null
+        return r.removePrefix("no ").let { try { String(Base64.decode(it, Base64.DEFAULT)) } catch (_: Exception) { it } }
+    }
+
     private fun drop() {
         try { socket?.close() } catch (_: Exception) {}
         socket = null; out = null; reader = null; running = false

@@ -125,6 +125,29 @@ class AppController extends ChangeNotifier {
     return err;
   }
 
+  // Viewers that switched this Android device's display off; it comes back when the last one leaves.
+  final Set<int> _screenOffBy = {};
+
+  Future<void> _screenPower(int sid, bool on) async {
+    if (!Platform.isAndroid) {
+      host.sendRtc(sid, jsonMsg(Msg.screenPowerResult, {'mode': 'on', 'error': 'unsupported'}));
+      return;
+    }
+    if (on) {
+      _screenOffBy.remove(sid);
+    } else {
+      _screenOffBy.add(sid);
+    }
+    Map<String, Object?> r;
+    try {
+      r = await AndroidBridge.screenPower(_screenOffBy.isEmpty);
+    } catch (e) {
+      r = {'mode': 'on', 'error': '$e'};
+    }
+    if (r['mode'] == 'on' && !on) _screenOffBy.remove(sid);
+    host.sendRtc(sid, jsonMsg(Msg.screenPowerResult, r));
+  }
+
   Future<void> _routeAudio(int sid, String mode) async {
     if (mode == 'viewer') {
       _soundHere.add(sid);
@@ -173,6 +196,10 @@ class AppController extends ChangeNotifier {
       ..padsCapable = pads != null
       ..vrCapable = pcvrHostSupported
       ..onRtc = ((sid, m) {
+        if (m[0] == Msg.screenPower) {
+          unawaited(_screenPower(sid, jsonBody(m)['on'] == true));
+          return;
+        }
         if (m[0] == Msg.audioRoute) {
           unawaited(_routeAudio(sid, jsonBody(m)['mode'] as String? ?? 'host'));
           return;
@@ -187,6 +214,7 @@ class AppController extends ChangeNotifier {
       ..onSessionEnded = ((sid) {
         unawaited(_rtc.remove(sid)?.stop());
         if (_soundHere.remove(sid)) unawaited(_applySpeakers());
+        if (_screenOffBy.remove(sid) && _screenOffBy.isEmpty) unawaited(AndroidBridge.screenPower(true));
       });
     host.addListener(notifyListeners);
     if (Platform.isLinux && (Platform.environment['XDG_SESSION_TYPE'] ?? '') == 'wayland') {

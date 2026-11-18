@@ -8,6 +8,7 @@ import '../config.dart';
 import '../platform/android.dart';
 import '../platform/macos.dart' as mac;
 import '../updater.dart';
+import 'adb_dialog.dart' show stopAdbServers;
 import 'two_factor.dart';
 import 'theme.dart';
 
@@ -413,6 +414,19 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                 icon: const Icon(Icons.power_settings_new),
                 label: const Text('Quit Localview'),
                 onPressed: () => _quit(context, app),
+              ),
+            ),
+          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.adb),
+                label: const Text('Stop adb servers'),
+                onPressed: () async {
+                  final m = ScaffoldMessenger.of(context);
+                  final msg = await stopAdbServers();
+                  m.showSnackBar(SnackBar(content: Text(msg)));
+                },
               ),
             ),
           Padding(
