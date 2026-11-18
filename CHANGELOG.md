@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.0
+
+- **Localview Pro starts by itself**: when a computer (Windows, macOS, Linux) connects to an Android device with Localview Pro, it now connects adb and starts real mouse & keyboard automatically in the background; a message says when it is on. Only the first pairing (6-digit code in the ADB dialog) is still done by hand. Wireless debugging and *ADB over Localview* must be on.
+- **adb goes straight over your network**: on the same network, adb (pairing, connecting, starting the helper) now talks to the device directly at its local address instead of through the encrypted Localview connection, which is faster and avoids "device offline". Over the internet it still goes through Localview.
+- Stale adb entries ("offline") are dropped and reconnected automatically, and the device answers the ADB dialog faster when Android already reports its wireless debugging port.
+
 ## 1.10.0
 
 - **Game mode for Android devices (much faster phone streaming)**: Android phones, tablets, TVs and headsets now stream their screen as real hardware-encoded video (WebRTC, H.264), the same way computers do in game mode, instead of one JPEG picture per frame. Frames are a fraction of the size, the picture is smoother with less delay, and the device works less hard. It uses the screen sharing that is already running, so there is no second "start recording" prompt on the device. It starts automatically while *Game mode* is on in your settings (the default); if it can't connect, Localview falls back to pictures as before. The device's sound keeps its own path (the sound button works the same). While a computer watches in game mode, other viewers of the same device get no new pictures until it stops.
