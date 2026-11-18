@@ -38,7 +38,7 @@ import java.lang.reflect.Method
  *   s x y dx dy           wheel (dy > 0 scrolls down, dx > 0 right)
  *   k keycode down        Android key code (modifiers are tracked for meta state)
  *   t base64              text through the virtual keyboard; replies "ok" or "no" (unmappable)
- *   p                     ping; replies "pong"
+ *   p                     ping; replies "pong <injected> <refused> <base64 last error>"
  *   audio                 (Android 12+) replies "ok", then streams the device's whole sound output as
  *                         PCM s16le stereo 48 kHz until the connection closes, or replies "no". While
  *                         this runs the sound plays only through Localview, not the device's speaker.
@@ -55,6 +55,9 @@ object ProInputServer {
     private var meta = 0
     private var lastX = 0f
     private var lastY = 0f
+    @Volatile private var injected = 0L
+    @Volatile private var refused = 0L
+    @Volatile private var lastError = ""
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -77,7 +80,7 @@ object ProInputServer {
             System.err.println("Localview Pro input is already running")
             return
         }
-        println("Localview Pro input ready")
+        println("Localview Pro input ready (Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT}, ${manager.javaClass.name})")
         while (true) {
             val s = server.accept()
             Thread { serve(s, token) }.start()
@@ -94,15 +97,20 @@ object ProInputServer {
                 val line = r.readLine() ?: break
                 val p = line.split(' ')
                 if (p[0] == "audio") { ProAudio.stream(out); break }
-                synchronized(this) {
+                try { synchronized(this) {
                     when (p[0]) {
                         "m" -> move(p[1].toFloat(), p[2].toFloat())
                         "b" -> button(p[1].toInt(), p[2] == "1", p[3].toFloat(), p[4].toFloat())
                         "s" -> scroll(p[1].toFloat(), p[2].toFloat(), p[3].toFloat(), p[4].toFloat())
                         "k" -> key(p[1].toInt(), p[2] == "1")
                         "t" -> out.write((if (text(String(Base64.decode(p[1], Base64.DEFAULT)))) "ok\n" else "no\n").toByteArray())
-                        "p" -> out.write("pong\n".toByteArray())
+                        "p" -> out.write("pong $injected $refused ${Base64.encodeToString(lastError.toByteArray(), Base64.NO_WRAP)}\n".toByteArray())
                     }
+                } } catch (e: java.io.IOException) {
+                    throw e
+                } catch (e: Exception) {
+                    // A malformed command must not end the connection.
+                    System.err.println("bad command '$line': $e")
                 }
             }
         } catch (_: Exception) {
@@ -112,7 +120,17 @@ object ProInputServer {
     }
 
     private fun send(e: InputEvent) {
-        try { inject.invoke(manager, e, 0 /* INJECT_INPUT_EVENT_MODE_ASYNC */) } catch (_: Exception) {}
+        try {
+            if (inject.invoke(manager, e, 0 /* INJECT_INPUT_EVENT_MODE_ASYNC */) == false) {
+                refused++
+                lastError = "Android refused the event"
+            } else injected++
+        } catch (t: Throwable) {
+            refused++
+            val c = (t as? java.lang.reflect.InvocationTargetException)?.targetException ?: t
+            if (lastError.isEmpty() || refused < 5) System.err.println("inject failed: $c")
+            lastError = c.toString()
+        }
     }
 
     private fun motion(action: Int, x: Float, y: Float, actionButton: Int = 0, vscroll: Float = 0f, hscroll: Float = 0f) {

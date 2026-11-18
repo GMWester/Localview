@@ -34,6 +34,7 @@ class KeepAliveService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        NetLocks.hold(this)
         running = true
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val builder = if (Build.VERSION.SDK_INT >= 26) {

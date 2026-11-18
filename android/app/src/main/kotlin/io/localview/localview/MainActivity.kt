@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -31,7 +30,6 @@ open class MainActivity : FlutterActivity() {
 
     private val reqCapture = 4711
     private var pendingCapture: MethodChannel.Result? = null
-    private var multicastLock: WifiManager.MulticastLock? = null
     private var myChannel: MethodChannel? = null
 
     // The main window's Flutter engine outlives the activity, so connections keep running
@@ -94,19 +92,7 @@ open class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            multicastLock = wifi.createMulticastLock("localview-discovery").apply {
-                setReferenceCounted(false)
-                acquire()
-            }
-        } catch (_: Exception) {
-        }
-    }
-
-    override fun onDestroy() {
-        try { multicastLock?.release() } catch (_: Exception) {}
-        super.onDestroy()
+        NetLocks.hold(this)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
