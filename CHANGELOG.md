@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.1
+
+- **Fixed: clicks landing in the wrong place on a horizontal Android device**: the device converted the pointer position using a screen size that could still be the vertical one after the screen turned (while Localview runs in the background), so in landscape the mouse acted far away from where it was shown. It now uses the display's current size, for both touch input and Localview Pro's real mouse.
+
 ## 1.11.0
 
 - **Localview Pro starts by itself**: when a computer (Windows, macOS, Linux) connects to an Android device with Localview Pro, it now connects adb and starts real mouse & keyboard automatically in the background; a message says when it is on. Only the first pairing (6-digit code in the ADB dialog) is still done by hand. Wireless debugging and *ADB over Localview* must be on.

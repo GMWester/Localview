@@ -192,22 +192,7 @@ object ProBridge {
         }
     }
 
-    private fun screen(ctx: Context): Pair<Float, Float> {
-        val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        return if (Build.VERSION.SDK_INT >= 30) {
-            val b = wm.maximumWindowMetrics.bounds; Pair(b.width().toFloat(), b.height().toFloat())
-        } else {
-            val m = DisplayMetrics(); @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(m)
-            Pair(m.widthPixels.toFloat(), m.heightPixels.toFloat())
-        }
-    }
-
-    private fun px(ctx: Context, args: Map<String, Any?>?): String {
-        val (w, h) = screen(ctx)
-        val x = ((args?.get("x") as? Number)?.toFloat() ?: 0f) * (w - 1)
-        val y = ((args?.get("y") as? Number)?.toFloat() ?: 0f) * (h - 1)
-        return "$x $y"
-    }
+    private fun screen(ctx: Context): Pair<Float, Float> = DisplaySize.current(ctx)
 
     fun handle(ctx: Context, method: String, args: Map<String, Any?>?, result: MethodChannel.Result): Boolean {
         val main = android.os.Handler(android.os.Looper.getMainLooper())
