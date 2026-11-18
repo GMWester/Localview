@@ -8,8 +8,6 @@ import android.content.ContextWrapper
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.net.LocalServerSocket
-import android.net.LocalSocket
 import android.os.Build
 import android.os.Looper
 import android.os.SystemClock
@@ -30,7 +28,7 @@ import java.lang.reflect.Method
  * Runs as its own process with adb "shell" privileges (started over ADB with
  * `CLASSPATH=<this APK> app_process / io.localview.localview.ProInputServer <token>`), which
  * may inject input events like a physical mouse and keyboard - something normal apps cannot do.
- * The Localview app connects over the abstract local socket "localview_pro_input" and must send
+ * The Localview app connects over TCP on 127.0.0.1:$PORT and must send
  * the per-install token first; then one command per line (coordinates in screen pixels):
  *
  *   m x y                 mouse moves (hover, or drag while a button is held)
@@ -44,7 +42,11 @@ import java.lang.reflect.Method
  *                         this runs the sound plays only through Localview, not the device's speaker.
  */
 object ProInputServer {
-    const val SOCKET = "localview_pro_input"
+    /**
+     * TCP port on 127.0.0.1. (An abstract unix socket can't be used: SELinux doesn't let normal
+     * apps connect to sockets of the shell user, so the app never reached the helper.)
+     */
+    const val PORT = 38917
 
     private lateinit var inject: Method
     private lateinit var manager: Any
@@ -76,7 +78,9 @@ object ProInputServer {
         setActionButton = try {
             MotionEvent::class.java.getMethod("setActionButton", Int::class.javaPrimitiveType)
         } catch (_: Exception) { null }
-        val server = try { LocalServerSocket(SOCKET) } catch (e: Exception) {
+        val server = try {
+            java.net.ServerSocket(PORT, 16, java.net.InetAddress.getByName("127.0.0.1"))
+        } catch (e: Exception) {
             System.err.println("Localview Pro input is already running")
             return
         }
@@ -87,7 +91,8 @@ object ProInputServer {
         }
     }
 
-    private fun serve(s: LocalSocket, token: String) {
+    private fun serve(s: java.net.Socket, token: String) {
+        s.tcpNoDelay = true
         try {
             val r = BufferedReader(InputStreamReader(s.inputStream))
             val out = s.outputStream

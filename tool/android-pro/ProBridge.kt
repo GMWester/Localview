@@ -1,8 +1,6 @@
 package io.localview.localview
 
 import android.content.Context
-import android.net.LocalSocket
-import android.net.LocalSocketAddress
 import android.os.Build
 import android.util.Base64
 import android.util.DisplayMetrics
@@ -20,8 +18,14 @@ import java.util.concurrent.Executors
  * normalized (0..1) and are converted to screen pixels here.
  */
 object ProBridge {
+    /** A connection to the helper on 127.0.0.1 (fails within a second when it isn't running). */
+    private fun helperSocket(): java.net.Socket = java.net.Socket().apply {
+        tcpNoDelay = true
+        connect(java.net.InetSocketAddress("127.0.0.1", ProInputServer.PORT), 1000)
+    }
+
     private val exec = Executors.newSingleThreadExecutor()
-    private var socket: LocalSocket? = null
+    private var socket: java.net.Socket? = null
     private var out: OutputStream? = null
     private var reader: BufferedReader? = null
     @Volatile private var running = false
@@ -45,8 +49,7 @@ object ProBridge {
     private fun status(ctx: Context): Map<String, Any?> {
         val base = mapOf("pro" to true, "command" to command(ctx), "log" to LOG)
         return try {
-            val s = LocalSocket()
-            s.connect(LocalSocketAddress(ProInputServer.SOCKET, LocalSocketAddress.Namespace.ABSTRACT))
+            val s = helperSocket()
             s.soTimeout = 1500
             try {
                 s.outputStream.write("${token(ctx)}\np\n".toByteArray())
@@ -104,8 +107,7 @@ object ProBridge {
 
     /** One command that needs an answer, on its own short-lived connection. */
     private fun ask(ctx: Context, line: String): String? = try {
-        val s = LocalSocket()
-        s.connect(LocalSocketAddress(ProInputServer.SOCKET, LocalSocketAddress.Namespace.ABSTRACT))
+        val s = helperSocket()
         s.soTimeout = 1500
         try {
             s.outputStream.write("${token(ctx)}\n$line\n".toByteArray())
@@ -125,8 +127,7 @@ object ProBridge {
     private fun connect(ctx: Context): Boolean {
         if (socket != null) return true
         return try {
-            val s = LocalSocket()
-            s.connect(LocalSocketAddress(ProInputServer.SOCKET, LocalSocketAddress.Namespace.ABSTRACT))
+            val s = helperSocket()
             s.soTimeout = 2000
             val o = s.outputStream
             val r = BufferedReader(InputStreamReader(s.inputStream))
@@ -147,8 +148,7 @@ object ProBridge {
     fun openAudio(ctx: Context): java.io.InputStream? {
         if (android.os.Build.VERSION.SDK_INT < 31) return null
         return try {
-            val s = LocalSocket()
-            s.connect(LocalSocketAddress(ProInputServer.SOCKET, LocalSocketAddress.Namespace.ABSTRACT))
+            val s = helperSocket()
             s.soTimeout = 2000
             s.outputStream.write("${token(ctx)}\naudio\n".toByteArray())
             val i = s.inputStream
