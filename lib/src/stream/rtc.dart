@@ -7,8 +7,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+// ignore: implementation_imports
+import 'package:flutter_webrtc/src/native/media_stream_impl.dart' show MediaStreamNative;
 
 import '../config.dart';
+import '../platform/android.dart' show androidChannel;
 import '../protocol.dart';
 
 /// Streaming quality requested by the controller.
@@ -61,7 +64,7 @@ Map<String, dynamic> _rtcConfig() => {
     };
 
 /// Platforms whose host can capture the screen through WebRTC.
-bool get rtcHostSupported => Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+bool get rtcHostSupported => Platform.isWindows || Platform.isMacOS || Platform.isLinux || Platform.isAndroid;
 
 bool? _usable;
 
@@ -109,6 +112,16 @@ class RtcHostSession {
 
   Future<void> start(GameModeSettings s) async {
     await stop();
+    if (Platform.isAndroid) {
+      // The running screen capture feeds a hardware-encoded video track (RtcScreen.kt); no second
+      // "start recording" prompt. The sound keeps its own path (PCM over the session).
+      await WebRTC.initialize(); // creates the factory the capture registers its track with
+      final m = await androidChannel.invokeMapMethod<String, Object?>('rtcScreenStart');
+      if (m == null) throw StateError('screen capture is not running');
+      _screen = MediaStreamNative.fromMap({...m, 'ownerTag': 'local'});
+      await _connect(s, withAudio: false);
+      return;
+    }
     final sources = await desktopCapturer.getSources(types: [SourceType.Screen]);
     final video = <String, dynamic>{
       if (sources.isNotEmpty)
@@ -118,6 +131,10 @@ class RtcHostSession {
     // Windows/Linux: system audio loopback comes with the screen capture.
     _screen = await navigator.mediaDevices
         .getDisplayMedia({'video': video, 'audio': s.audio && !Platform.isMacOS});
+    await _connect(s, withAudio: true);
+  }
+
+  Future<void> _connect(GameModeSettings s, {required bool withAudio}) async {
     final pc = await createPeerConnection(_rtcConfig());
     _pc = pc;
     pc.onIceCandidate = (c) {
@@ -129,7 +146,8 @@ class RtcHostSession {
     final vt = _screen!.getVideoTracks();
     if (vt.isEmpty) throw StateError('screen capture produced no video');
     if (s.video) await _addVideo(pc, vt.first, s);
-    await _addAudio(pc, s);
+    _audioCount = 0;
+    if (withAudio) await _addAudio(pc, s);
     final offer = await pc.createOffer({});
     await pc.setLocalDescription(offer);
     send(jsonMsg(Msg.rtcOffer, {'sdp': offer.sdp, 'type': offer.type, 'audio': _audioCount > 0, 'video': s.video}));
@@ -260,6 +278,11 @@ class RtcHostSession {
   Future<void> stop() async {
     final pc = _pc;
     _pc = null;
+    if (Platform.isAndroid && _screen != null) {
+      try {
+        await androidChannel.invokeMethod('rtcScreenStop');
+      } catch (_) {}
+    }
     for (final s in [_screen, _extraAudio]) {
       for (final t in s?.getTracks() ?? const <MediaStreamTrack>[]) {
         try {

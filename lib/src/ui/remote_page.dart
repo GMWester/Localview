@@ -51,6 +51,7 @@ class _RemotePageState extends State<RemotePage> {
 
   /// Sound plays only on this device (true) or only on the controlled device (false).
   bool _soundHere = false;
+  String _screenMode = 'on'; // Android host display: 'on', 'off' (Pro) or 'dim'
   RtcClient? _sound; // audio-only stream while game mode is off
   PcmPlayer? _pcm; // sound of an Android host
   PadForwarder? _pads;
@@ -81,6 +82,17 @@ class _RemotePageState extends State<RemotePage> {
       _snack(err == 'permission'
           ? 'Allow "Modify system settings" for Localview on ${s.peerName} (the screen is open there), then press rotate again.'
           : 'Could not rotate ${s.peerName}: $err');
+    };
+    s.onScreenPower = (mode, err) {
+      if (!mounted) return;
+      setState(() => _screenMode = mode);
+      if (err == 'permission') {
+        _snack('Allow "Modify system settings" for Localview on ${s.peerName} (the screen is open there), then press the button again.');
+      } else if (err != null) {
+        _snack('Could not turn the screen of ${s.peerName} off: $err');
+      } else if (mode == 'dim') {
+        _snack('${s.peerName}\'s screen is at minimum brightness. With Localview Pro\'s helper running it switches off completely.');
+      }
     };
     s.onClipboard = (t) {
       Clipboard.setData(ClipboardData(text: t));
@@ -137,12 +149,14 @@ class _RemotePageState extends State<RemotePage> {
       setState(() {});
     });
     // Game mode brings the sound to this device (only here, when the host can silence its speakers).
-    await _stopSound();
+    // Android hosts send their sound separately (PCM): keep that player; others bring it in the stream.
+    if (!s.peerPcmAudio) await _stopSound();
     r.setAudioEnabled(true);
     if (s.peerAudioRoute && !_soundHere) {
       _soundHere = true;
       s.setAudioRoute('viewer');
     }
+    if (s.peerPcmAudio && _soundHere) await _startSound();
     await r.start(_preset.onMonitor(s.monitor?.osIndex));
     // Fall back if nothing arrives (e.g. UDP blocked between the networks).
     Future.delayed(const Duration(seconds: 15), () {
@@ -251,7 +265,7 @@ class _RemotePageState extends State<RemotePage> {
   Future<void> _setSoundHere(bool here) async {
     setState(() => _soundHere = here);
     if (here) {
-      if (_rtc != null) {
+      if (_rtc != null && !s.peerPcmAudio) {
         _rtc!.setAudioEnabled(true);
       } else {
         await _startSound();
@@ -655,6 +669,14 @@ class _RemotePageState extends State<RemotePage> {
                   IconButton(tooltip: 'Home', icon: const Icon(Icons.circle_outlined), onPressed: () => s.send(specialMsg(Special.home))),
                   IconButton(tooltip: 'Recents', icon: const Icon(Icons.crop_square), onPressed: () => s.send(specialMsg(Special.recents))),
                 ],
+                if (isAndroidPeer && s.peerRotate)
+                  IconButton(
+                    tooltip: _screenMode == 'on'
+                        ? 'Turn ${s.peerName}\'s screen off (the picture stays here)'
+                        : 'Turn ${s.peerName}\'s screen back on',
+                    icon: Icon(_screenMode == 'on' ? Icons.mobile_off : Icons.smartphone),
+                    onPressed: () => s.setScreenPower(_screenMode != 'on'),
+                  ),
                 if (s.peerAudioRoute)
                   IconButton(
                     tooltip: _soundHere

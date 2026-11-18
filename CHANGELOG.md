@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.0
+
+- **Game mode for Android devices (much faster phone streaming)**: Android phones, tablets, TVs and headsets now stream their screen as real hardware-encoded video (WebRTC, H.264), the same way computers do in game mode, instead of one JPEG picture per frame. Frames are a fraction of the size, the picture is smoother with less delay, and the device works less hard. It uses the screen sharing that is already running, so there is no second "start recording" prompt on the device. It starts automatically while *Game mode* is on in your settings (the default); if it can't connect, Localview falls back to pictures as before. The device's sound keeps its own path (the sound button works the same). While a computer watches in game mode, other viewers of the same device get no new pictures until it stops.
+- **Turn the controlled phone's screen off**: when you control an Android device, the session toolbar has a screen button. With Localview Pro's helper running, the device's display really switches off while the picture keeps streaming to your computer, so only you see it and the device runs cooler (the power button turns it back on). Without the helper the brightness goes to its minimum instead (allow *Modify system settings* the first time). The screen comes back when you press the button again or disconnect.
+- **Stop adb servers** (Windows, macOS, Linux): a button on *This device* (and *Stop adb* in the ADB dialog) ends every adb server still running on the computer.
+
 ## 1.9.4
 
 - **Fixed: Localview Pro's real mouse & keyboard never turned on**: the helper listened on a kind of local socket that Android's security rules (SELinux) don't let normal apps open, so the app could never reach it and kept saying "off" even while the helper ran. The helper now listens on 127.0.0.1 (TCP), which apps may connect to. After updating, start the helper again from the computer; it replaces the old one.
