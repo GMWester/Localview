@@ -3,6 +3,7 @@
 ## 1.11.1
 
 - **Fixed: clicks landing in the wrong place on a horizontal Android device**: the device converted the pointer position using a screen size that could still be the vertical one after the screen turned (while Localview runs in the background), so in landscape the mouse acted far away from where it was shown. It now uses the display's current size, for both touch input and Localview Pro's real mouse.
+- **Fixed: the horizontal / vertical button sometimes doing nothing**: the computer chose the direction from the size of the last still picture, which no longer updates in game mode, so it could ask for the orientation the device already had. The device now switches to the other orientation based on its own rotation. If the app on screen keeps its own orientation (many home screens and some apps do), Localview says so instead of silently doing nothing.
 
 ## 1.11.0
 

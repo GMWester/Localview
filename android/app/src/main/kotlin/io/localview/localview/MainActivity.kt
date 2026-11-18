@@ -170,26 +170,49 @@ open class MainActivity : FlutterActivity() {
                     }.start()
                 }
                 "setRotation" -> {
-                    // portrait | landscape | auto. Apps that fix their own orientation keep it.
+                    // portrait | landscape | toggle | auto. Answers null, "permission", "locked"
+                    // (the app on screen keeps its own orientation) or another error.
                     val mode = call.argument<String>("mode") ?: "auto"
                     if (Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(this)) {
                         startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName"))
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         result.success("permission")
                     } else {
-                        try {
-                            val cr = contentResolver
-                            if (mode == "auto") {
-                                Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, 1)
-                            } else {
-                                Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, 0)
-                                Settings.System.putInt(cr, Settings.System.USER_ROTATION,
-                                    if (mode == "landscape") android.view.Surface.ROTATION_90 else android.view.Surface.ROTATION_0)
+                        val ctx = applicationContext
+                        Thread {
+                            val err = try {
+                                val cr = ctx.contentResolver
+                                val dm = ctx.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+                                val display = dm.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+                                val before = display.rotation
+                                if (mode == "auto") {
+                                    Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, 1)
+                                    null
+                                } else {
+                                    // Decided here from the real current rotation, so a stale picture
+                                    // size on the computer can't send the wrong direction.
+                                    val sideways = before == android.view.Surface.ROTATION_90 || before == android.view.Surface.ROTATION_270
+                                    val landscape = when (mode) { "landscape" -> true; "portrait" -> false; else -> !sideways }
+                                    Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, 0)
+                                    Settings.System.putInt(cr, Settings.System.USER_ROTATION,
+                                        if (landscape) android.view.Surface.ROTATION_90 else android.view.Surface.ROTATION_0)
+                                    if (landscape == sideways) null else {
+                                        // Give the screen a moment to turn; if it didn't, the app decides.
+                                        var turned = false
+                                        for (i in 0 until 15) {
+                                            Thread.sleep(100)
+                                            val r = display.rotation
+                                            val now = r == android.view.Surface.ROTATION_90 || r == android.view.Surface.ROTATION_270
+                                            if (now == landscape) { turned = true; break }
+                                        }
+                                        if (turned) null else "locked"
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                e.message ?: "failed"
                             }
-                            result.success(null)
-                        } catch (e: Exception) {
-                            result.success(e.message ?: "failed")
-                        }
+                            runOnUiThread { result.success(err) }
+                        }.start()
                     }
                 }
                 "grabJpeg" -> {
