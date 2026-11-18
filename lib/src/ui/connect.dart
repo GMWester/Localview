@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../app_controller.dart';
 import '../client.dart';
 import '../config.dart';
+import '../platform/drives.dart' show webClientAllowsLargeFiles, allowLargeFilesOnDrives;
 import '../storage.dart';
 import '../viewer_window.dart';
 import 'remote_page.dart';
@@ -58,6 +61,24 @@ Future<ClientSession?> connectTo(
           final name = session?.peerName ?? volume;
           if (where != null) {
             messenger.showSnackBar(SnackBar(content: Text("$name's storage: $where")));
+            // Windows: videos and other files over 50 MB need the WebDAV limit raised once.
+            if (Platform.isWindows && !await webClientAllowsLargeFiles()) {
+              messenger.showSnackBar(SnackBar(
+                duration: const Duration(seconds: 20),
+                content: const Text('Windows opens files only up to 50 MB from device drives, so most videos fail. '
+                    'Allow larger files (asks for administrator permission once)?'),
+                action: SnackBarAction(
+                  label: 'Allow',
+                  onPressed: () async {
+                    final err = await allowLargeFilesOnDrives();
+                    messenger.showSnackBar(SnackBar(
+                        content: Text(err == null
+                            ? 'Files up to 4 GB now open from device drives. Reconnect if a video still fails.'
+                            : 'Could not change it: $err')));
+                  },
+                ),
+              ));
+            }
           } else if (app.store.mountDrives && app.drives.lastError != null) {
             messenger.showSnackBar(SnackBar(
                 duration: const Duration(seconds: 10),
