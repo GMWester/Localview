@@ -167,9 +167,12 @@ class RtcHostSession {
       final p = vTrans.sender.parameters;
       final enc = (p.encodings == null || p.encodings!.isEmpty) ? [RTCRtpEncoding()] : p.encodings!;
       final srcH = (vt.first.getSettings()['height'] as num?)?.toDouble() ?? 0;
+      // Phones upload over Wi-Fi: more than ~8 Mbit/s fills their send queue, and the remote
+      // control's input (same connection) then waits behind the video. Plenty for a phone screen.
+      final kbps = Platform.isAndroid && s.bitrateKbps > 8000 ? 8000 : s.bitrateKbps;
       for (final e in enc) {
-        e.maxBitrate = s.bitrateKbps * 1000;
-        e.maxFramerate = s.fps;
+        e.maxBitrate = kbps * 1000;
+        e.maxFramerate = Platform.isAndroid && s.fps > 60 ? 60 : s.fps;
         if (s.maxHeight > 0 && srcH > s.maxHeight) e.scaleResolutionDownBy = srcH / s.maxHeight;
       }
       p.encodings = enc;

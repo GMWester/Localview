@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.1
+
+- **Play videos from a device's drive on your computer**: Windows' built-in WebDAV client refuses files over 50 MB by default, so most videos on a phone's drive failed with an error. When a device's storage appears as a drive, Localview now offers to raise that limit to 4 GB (once, with Windows' administrator prompt); the same is on *This device → Allow videos & large files on device drives*. On all computers, files now stream faster (the next part is fetched from the device while the current one is sent) and carry their real type (video/mp4, image/jpeg, ...), which some players need. macOS and Linux have no such size limit.
+- **Lower latency when controlling an Android device in game mode** (regression in 1.10.0): the device re-sent a saved copy of its screen while nothing changed, and that copy could be up to 0.4 s old, so the picture jumped back and seemed to lag. Frames now go straight to the encoder (WebRTC repeats the last one by itself). Android devices also stream at most 8 Mbit/s and 60 fps: a phone uploading the default 20 Mbit/s over Wi-Fi filled its own send queue, which delayed the remote control's input on the same connection.
+- **Fixed: clicks landing in the wrong place on a horizontal Android device**: the device converted the pointer position using a screen size that could still be the vertical one after the screen turned (while Localview runs in the background), so in landscape the mouse acted far away from where it was shown. It now uses the display's current size, for both touch input and Localview Pro's real mouse.
+- **Fixed: the horizontal / vertical button sometimes doing nothing**: the computer chose the direction from the size of the last still picture, which no longer updates in game mode, so it could ask for the orientation the device already had. The device now switches to the other orientation based on its own rotation. If the app on screen keeps its own orientation (many home screens and some apps do), Localview says so instead of silently doing nothing.
+
 ## 1.11.0
 
 - **Localview Pro starts by itself**: when a computer (Windows, macOS, Linux) connects to an Android device with Localview Pro, it now connects adb and starts real mouse & keyboard automatically in the background; a message says when it is on. Only the first pairing (6-digit code in the ADB dialog) is still done by hand. Wireless debugging and *ADB over Localview* must be on.

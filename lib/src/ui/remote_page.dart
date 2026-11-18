@@ -51,6 +51,13 @@ class _RemotePageState extends State<RemotePage> {
 
   /// Sound plays only on this device (true) or only on the controlled device (false).
   bool _soundHere = false;
+
+  /// Whether the device's picture is horizontal (game-mode video size when that is what shows).
+  bool get _sideways {
+    final r = _rtc;
+    if (r != null && r.active && r.renderer.videoWidth > 0) return r.renderer.videoWidth > r.renderer.videoHeight;
+    return s.screenW > s.screenH;
+  }
   String _screenMode = 'on'; // Android host display: 'on', 'off' (Pro) or 'dim'
   RtcClient? _sound; // audio-only stream while game mode is off
   PcmPlayer? _pcm; // sound of an Android host
@@ -81,7 +88,9 @@ class _RemotePageState extends State<RemotePage> {
       if (err == null || !mounted) return;
       _snack(err == 'permission'
           ? 'Allow "Modify system settings" for Localview on ${s.peerName} (the screen is open there), then press rotate again.'
-          : 'Could not rotate ${s.peerName}: $err');
+          : err == 'locked'
+              ? 'The app on ${s.peerName}\'s screen keeps its own orientation, so it didn\'t turn. Try it on another screen (e.g. an app that rotates).'
+              : 'Could not rotate ${s.peerName}: $err');
     };
     s.onScreenPower = (mode, err) {
       if (!mounted) return;
@@ -694,9 +703,10 @@ class _RemotePageState extends State<RemotePage> {
                   ),
                 if (s.peerRotate)
                   IconButton(
-                    tooltip: s.screenW > s.screenH ? 'Switch the device to vertical' : 'Switch the device to horizontal',
-                    icon: Icon(s.screenW > s.screenH ? Icons.stay_current_portrait : Icons.stay_current_landscape),
-                    onPressed: () => s.rotate(s.screenW > s.screenH ? 'portrait' : 'landscape'),
+                    tooltip: _sideways ? 'Switch the device to vertical' : 'Switch the device to horizontal',
+                    icon: Icon(_sideways ? Icons.stay_current_portrait : Icons.stay_current_landscape),
+                    // The device picks the other orientation from its real rotation.
+                    onPressed: () => s.rotate('toggle'),
                   ),
                 if (s.monitors.length > 1)
                   PopupMenuButton<String>(
