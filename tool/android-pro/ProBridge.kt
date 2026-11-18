@@ -194,6 +194,13 @@ object ProBridge {
 
     private fun screen(ctx: Context): Pair<Float, Float> = DisplaySize.current(ctx)
 
+    private fun px(ctx: Context, args: Map<String, Any?>?): String {
+        val (w, h) = screen(ctx)
+        val x = ((args?.get("x") as? Number)?.toFloat() ?: 0f) * (w - 1)
+        val y = ((args?.get("y") as? Number)?.toFloat() ?: 0f) * (h - 1)
+        return "$x $y"
+    }
+
     fun handle(ctx: Context, method: String, args: Map<String, Any?>?, result: MethodChannel.Result): Boolean {
         val main = android.os.Handler(android.os.Looper.getMainLooper())
         fun async(block: () -> Any?) = exec.execute { val r = block(); main.post { result.success(r) } }

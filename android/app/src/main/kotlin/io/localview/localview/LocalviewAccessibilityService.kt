@@ -24,6 +24,11 @@ class LocalviewAccessibilityService : AccessibilityService() {
 
     private fun screen(): Pair<Float, Float> = DisplaySize.current(this)
 
+    private fun stroke(path: Path, ms: Long) {
+        val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, maxOf(1L, ms))).build()
+        dispatchGesture(g, null, null)
+    }
+
     // Live touch (Android 8+): the finger goes down when the remote button is pressed, follows
     // the pointer while it is held and lifts on release - no waiting for the whole gesture.
     private var live: GestureDescription.StrokeDescription? = null
