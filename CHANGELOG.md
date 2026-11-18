@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.2
+
+- **Fixed (for real): the mouse acting in the wrong place on a horizontal Android device**: besides the input, the screen capture also read a screen size that could still be the vertical one after the device turned. The horizontal screen was then squeezed into a vertical picture with black bars, and every click was mapped onto the wrong spot. Capture and input now check the size against the display's actual rotation (and the panel's natural orientation, for tablets), so the picture and the clicks follow every turn.
+
 ## 1.11.1
 
 - **Play videos from a device's drive on your computer**: Windows' built-in WebDAV client refuses files over 50 MB by default, so most videos on a phone's drive failed with an error. When a device's storage appears as a drive, Localview now offers to raise that limit to 4 GB (once, with Windows' administrator prompt); the same is on *This device → Allow videos & large files on device drives*. On all computers, files now stream faster (the next part is fetched from the device while the current one is sent) and carry their real type (video/mp4, image/jpeg, ...), which some players need. macOS and Linux have no such size limit.
