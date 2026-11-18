@@ -12,6 +12,10 @@ object ProBridge {
     @Suppress("UNUSED_PARAMETER")
     fun openAudio(ctx: Context): java.io.InputStream? = null
 
+    /** Display panel off/on: needs the Pro helper; the regular build answers "not running". */
+    @Suppress("UNUSED_PARAMETER")
+    fun screenPower(ctx: Context, on: Boolean): String? = "not running"
+
     fun handle(ctx: Context, method: String, args: Map<String, Any?>?, result: MethodChannel.Result): Boolean {
         if (method == "pro.status") {
             result.success(mapOf("pro" to false))

@@ -44,6 +44,10 @@ abstract final class Msg {
   static const audioRouteResult = 0x57;
   /// Host -> viewer: [type][PCM s16le stereo 48 kHz] - the sound of an Android host (no WebRTC there).
   static const audioPcm = 0x58;
+  /// Viewer -> host (Android): {on} - display panel off while it is being controlled, or back on.
+  static const screenPower = 0x59;
+  /// Host -> viewer: {mode: 'off' | 'dim' | 'on', error?}
+  static const screenPowerResult = 0x5A;
 
   /// Gamepad state: [type][pad][u16 buttons][u8 lt][u8 rt][i16 lx][i16 ly][i16 rx][i16 ry] (XInput layout).
   static const gamepad = 0x60;

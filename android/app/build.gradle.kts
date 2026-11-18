@@ -79,6 +79,9 @@ flutter {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
+    // Game mode on Android feeds the screen capture into WebRTC (RtcScreen.kt). Same library and
+    // version flutter_webrtc ships; declared here only so the app's code can use its classes.
+    implementation("io.github.webrtc-sdk:android:150.7871.04")
 }
 
 // Jetpack XR SceneCore: Virtual-Desktop-style theater (Full Space + large screen).
