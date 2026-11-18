@@ -147,6 +147,28 @@ open class MainActivity : FlutterActivity() {
                     KeepAliveService.update(this, call.argument<Boolean>("on") == true, call.argument<String>("tip") ?: "")
                     result.success(null)
                 }
+                "screenPower" -> {
+                    // off: Localview Pro turns the panel off (capture continues); otherwise the
+                    // brightness goes to its minimum. on: everything back. Answers {mode, error?}.
+                    val on = call.argument<Boolean>("on") == true
+                    val ctx = applicationContext
+                    Thread {
+                        val proErr = ProBridge.screenPower(ctx, on)
+                        val dimErr = if (proErr == null && !on) null else ScreenDim.set(ctx, !on)
+                        val res: Map<String, Any?> = when {
+                            on -> mapOf("mode" to "on")
+                            proErr == null -> mapOf("mode" to "off")
+                            dimErr == null -> mapOf("mode" to "dim", "pro" to proErr)
+                            dimErr == "permission" -> {
+                                startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName"))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                mapOf("mode" to "on", "error" to "permission")
+                            }
+                            else -> mapOf("mode" to "on", "error" to dimErr)
+                        }
+                        runOnUiThread { result.success(res) }
+                    }.start()
+                }
                 "setRotation" -> {
                     // portrait | landscape | auto. Apps that fix their own orientation keep it.
                     val mode = call.argument<String>("mode") ?: "auto"
@@ -176,6 +198,8 @@ open class MainActivity : FlutterActivity() {
                         result.success(it)
                     }
                 }
+                "rtcScreenStart" -> try { result.success(RtcScreen.start()) } catch (e: Exception) { result.error("rtc", e.message, null) }
+                "rtcScreenStop" -> { RtcScreen.stop(); result.success(null) }
                 "audioSupported" -> result.success(AudioCapture.supported())
                 "audioStart" -> {
                     if (Build.VERSION.SDK_INT >= 29 && !AudioCapture.permitted(this)) requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)

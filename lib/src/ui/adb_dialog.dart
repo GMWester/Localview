@@ -47,6 +47,29 @@ Future<String> installAdb() async {
   }
 }
 
+/// Stops every adb server on this computer (`adb kill-server`, then any adb process left over,
+/// e.g. from another adb copy). Returns a short report.
+Future<String> stopAdbServers() async {
+  final adb = await findAdbAnywhere();
+  var asked = false;
+  if (adb != null) {
+    try {
+      await Process.run(adb, ['kill-server']).timeout(const Duration(seconds: 10));
+      asked = true;
+    } catch (_) {}
+  }
+  var killed = false;
+  try {
+    final r = Platform.isWindows
+        ? await Process.run('taskkill', ['/F', '/IM', 'adb.exe'])
+        : await Process.run('pkill', ['-x', 'adb']);
+    killed = r.exitCode == 0;
+  } catch (_) {}
+  if (killed) return 'Stopped the adb servers that were still running.';
+  if (asked) return 'adb server stopped.';
+  return 'No adb server was running.';
+}
+
 /// Unpacks a Platform-Tools zip (which holds platform-tools/...) into [root].
 Future<void> extractPlatformTools(List<int> zip, String root) async {
   for (final f in ZipDecoder().decodeBytes(zip)) {
@@ -334,6 +357,16 @@ class _AdbDialogState extends State<_AdbDialog> {
         child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: body)),
       ),
       actions: [
+        if (_adb != null)
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () async {
+                    final msg = await stopAdbServers();
+                    if (mounted) setState(() => _output = msg);
+                  },
+            child: const Text('Stop adb'),
+          ),
         TextButton(onPressed: _busy ? null : _refresh, child: const Text('Refresh')),
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
       ],
