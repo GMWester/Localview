@@ -51,7 +51,9 @@ class DiscoveryResponder {
 /// Finds Localview hosts on the local network: broadcast query plus a unicast
 /// sweep of the local /24 (needed on iOS and networks that drop broadcasts).
 class DiscoveryScanner extends ChangeNotifier {
-  DiscoveryScanner(this.myId);
+  DiscoveryScanner(this.myId, {this.port = kDiscoveryPort});
+  /// Port the devices answer on (tests use their own).
+  final int port;
   final String myId;
   final Map<String, LanDevice> devices = {};
   RawDatagramSocket? _sock;
@@ -108,7 +110,7 @@ class DiscoveryScanner extends ChangeNotifier {
     } catch (_) {}
     for (final t in targets) {
       try {
-        s.send(q, t, kDiscoveryPort);
+        s.send(q, t, port);
       } catch (_) {}
     }
     final now = DateTime.now();
