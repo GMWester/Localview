@@ -349,13 +349,13 @@ object ProScreen {
         if (dc != null) {
             val ids = dc.getMethod("getPhysicalDisplayIds").invoke(null) as LongArray
             val tok = dc.getMethod("getPhysicalDisplayToken", Long::class.javaPrimitiveType)
-            return ids.mapNotNull { tok.invoke(null, it) as? android.os.IBinder }
+            return ids.toList().mapNotNull { tok.invoke(null, it) as? android.os.IBinder }
         }
         if (Build.VERSION.SDK_INT >= 29) {
             try {
                 val ids = sc.getMethod("getPhysicalDisplayIds").invoke(null) as LongArray
                 val tok = sc.getMethod("getPhysicalDisplayToken", Long::class.javaPrimitiveType)
-                return ids.mapNotNull { tok.invoke(null, it) as? android.os.IBinder }
+                return ids.toList().mapNotNull { tok.invoke(null, it) as? android.os.IBinder }
             } catch (_: NoSuchMethodException) {}
         }
         val t = try {
