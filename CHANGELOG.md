@@ -2,6 +2,7 @@
 
 ## 1.11.1
 
+- **Lower latency when controlling an Android device in game mode** (regression in 1.10.0): the device re-sent a saved copy of its screen while nothing changed, and that copy could be up to 0.4 s old, so the picture jumped back and seemed to lag. Frames now go straight to the encoder (WebRTC repeats the last one by itself). Android devices also stream at most 8 Mbit/s and 60 fps: a phone uploading the default 20 Mbit/s over Wi-Fi filled its own send queue, which delayed the remote control's input on the same connection.
 - **Fixed: clicks landing in the wrong place on a horizontal Android device**: the device converted the pointer position using a screen size that could still be the vertical one after the screen turned (while Localview runs in the background), so in landscape the mouse acted far away from where it was shown. It now uses the display's current size, for both touch input and Localview Pro's real mouse.
 - **Fixed: the horizontal / vertical button sometimes doing nothing**: the computer chose the direction from the size of the last still picture, which no longer updates in game mode, so it could ask for the orientation the device already had. The device now switches to the other orientation based on its own rotation. If the app on screen keeps its own orientation (many home screens and some apps do), Localview says so instead of silently doing nothing.
 
