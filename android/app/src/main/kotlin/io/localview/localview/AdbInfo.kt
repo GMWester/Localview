@@ -38,7 +38,8 @@ object AdbInfo {
             val sp = Class.forName("android.os.SystemProperties")
             (sp.getMethod("get", String::class.java).invoke(null, "service.adb.tls.port") as String).toIntOrNull()
         } catch (_: Exception) { null }
-        discover(ctx) { connect, pairing ->
+        // With the port already known, the network lookup only has to find a pairing code dialog.
+        discover(ctx, if (tls != null && tls > 0) 1200L else 2500L) { connect, pairing ->
             val c = (connect + listOfNotNull(tls?.takeIf { it > 0 })).distinct()
             done(base + mapOf("connect" to c, "pairing" to pairing))
         }
@@ -52,7 +53,7 @@ object AdbInfo {
      * Browses both service types for ~2.5 s and keeps the ones on this device. Always answers
      * within ~5 s: on some devices resolving a service never calls back.
      */
-    private fun discover(ctx: Context, report: (List<Int>, List<Int>) -> Unit) {
+    private fun discover(ctx: Context, browseMs: Long, report: (List<Int>, List<Int>) -> Unit) {
         var answered = false
         val main0 = Handler(Looper.getMainLooper())
         lateinit var connect0: MutableSet<Int>
@@ -104,6 +105,6 @@ object AdbInfo {
                 } catch (_: Exception) { main.post { next() } }
             }
             next()
-        }, 2500)
+        }, browseMs)
     }
 }
