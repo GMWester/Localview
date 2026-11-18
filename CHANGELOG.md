@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.3
+
+- **Localview Pro can no longer freeze the session**: mouse and keyboard events now go through a queue that never blocks the app (pointer moves are merged), and the status check uses its own connection. Before, a helper that stopped reading could stall input and status checks, so clicks did nothing, the picture seemed frozen and the ADB dialog said the device "did not answer in time".
+- **Localview Pro checks that Android accepts its input**: the helper counts the events Android accepts and refuses. If Android refuses everything, the device uses touch input again and *This device* and the ADB dialog show the reason.
+- **ADB dialog**: after *Start real mouse & keyboard* it shows the helper's own log (read through adb), adb's output is always visible, and a slow answer from the device no longer hides the buttons and ports it showed before.
+
 ## 1.9.2
 
 - **Install adb from Localview**: the ADB dialog (*⋮ → ADB (wireless debugging)…*) has an **Install adb** button on Windows, macOS and Linux that downloads Google's Android SDK Platform-Tools into Localview's own folder, so you no longer have to install adb yourself before pairing or starting Localview Pro's real mouse & keyboard.

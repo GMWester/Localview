@@ -35,10 +35,91 @@ object ProBridge {
         return t
     }
 
+    /** The helper's messages (start-up, errors); the computer's ADB dialog shows them. */
+    const val LOG = "/data/local/tmp/localview_pro.log"
+
+    /**
+     * Health check on its own short-lived connection (never queued behind input): running,
+     * and whether Android accepts the events it injects.
+     */
+    private fun status(ctx: Context): Map<String, Any?> {
+        val base = mapOf("pro" to true, "command" to command(ctx), "log" to LOG)
+        return try {
+            val s = LocalSocket()
+            s.connect(LocalSocketAddress(ProInputServer.SOCKET, LocalSocketAddress.Namespace.ABSTRACT))
+            s.soTimeout = 1500
+            try {
+                s.outputStream.write("${token(ctx)}\np\n".toByteArray())
+                val r = BufferedReader(InputStreamReader(s.inputStream))
+                if (r.readLine() != "ok") return base + mapOf("running" to false, "error" to "The helper did not accept this app (restart it)")
+                val p = (r.readLine() ?: "").split(' ')
+                if (p.firstOrNull() != "pong") return base + mapOf("running" to false, "error" to "The helper did not answer")
+                val ok = p.getOrNull(1)?.toLongOrNull() ?: 0L
+                val bad = p.getOrNull(2)?.toLongOrNull() ?: 0L
+                val err = p.getOrNull(3)?.let { try { String(Base64.decode(it, Base64.DEFAULT)) } catch (_: Exception) { "" } } ?: ""
+                // Android refuses everything it sends: use touch input instead.
+                val working = !(bad > 0 && ok == 0L)
+                base + mapOf("running" to working, "injected" to ok, "refused" to bad,
+                    "error" to if (working) null else "Android refused the helper's input: $err")
+            } finally {
+                try { s.close() } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {
+            base + mapOf("running" to false)
+        }
+    }
+
+    // Input goes through a queue to a writer thread, so a slow or stuck helper can never block
+    // the app; pointer moves are merged (only the newest one waits).
+    private val queue = java.util.concurrent.LinkedBlockingDeque<String>()
+    @Volatile private var pendingMove: String? = null
+    private val moveLock = Object()
+    @Volatile private var writer: Thread? = null
+
+    private fun enqueue(ctx: Context, line: String) {
+        if (line.startsWith("m ")) {
+            synchronized(moveLock) {
+                val had = pendingMove != null
+                pendingMove = line
+                if (!had) queue.add("\u0000move")
+            }
+        } else {
+            synchronized(moveLock) {
+                // Keep the order: a waiting move goes first.
+                pendingMove?.let { queue.add(it); pendingMove = null; queue.remove("\u0000move") }
+            }
+            queue.add(line)
+        }
+        if (queue.size > 500) queue.clear() // helper gone and nobody noticed: don't grow forever
+        if (writer?.isAlive != true) {
+            writer = Thread({
+                while (true) {
+                    var l = queue.take()
+                    if (l == "\u0000move") l = synchronized(moveLock) { pendingMove.also { pendingMove = null } } ?: continue
+                    sendLine(ctx, l) // only this thread uses the input connection
+                }
+            }, "localview-pro-writer").apply { isDaemon = true; start() }
+        }
+    }
+
+    /** One command that needs an answer, on its own short-lived connection. */
+    private fun ask(ctx: Context, line: String): String? = try {
+        val s = LocalSocket()
+        s.connect(LocalSocketAddress(ProInputServer.SOCKET, LocalSocketAddress.Namespace.ABSTRACT))
+        s.soTimeout = 1500
+        try {
+            s.outputStream.write("${token(ctx)}\n$line\n".toByteArray())
+            val r = BufferedReader(InputStreamReader(s.inputStream))
+            if (r.readLine() == "ok") r.readLine() else null
+        } finally {
+            try { s.close() } catch (_: Exception) {}
+        }
+    } catch (_: Exception) { null }
+
     /** Shell command that starts the helper (run it over ADB); keeps running after ADB disconnects. */
     private fun command(ctx: Context): String =
         "CLASSPATH=${ctx.applicationInfo.sourceDir} setsid app_process /system/bin io.localview.localview.ProInputServer " +
-            "${token(ctx)} > /dev/null 2>&1 < /dev/null &"
+            "${token(ctx)} > $LOG 2>&1 < /dev/null &"
 
     /** Connects (or reconnects) to the helper. Runs on [exec]. */
     private fun connect(ctx: Context): Boolean {
@@ -125,24 +206,27 @@ object ProBridge {
         val main = android.os.Handler(android.os.Looper.getMainLooper())
         fun async(block: () -> Any?) = exec.execute { val r = block(); main.post { result.success(r) } }
         when (method) {
-            "pro.status" -> async {
-                val ok = sendLine(ctx, "p", reply = true) == "pong"
-                mapOf("pro" to true, "running" to ok, "command" to command(ctx))
+            "pro.status" -> Thread {
+                val st = status(ctx)
+                main.post { result.success(st) }
+            }.start()
+            "pro.move" -> { enqueue(ctx, "m ${px(ctx, args)}"); result.success(true) }
+            "pro.button" -> {
+                enqueue(ctx, "b ${(args?.get("button") as? Number)?.toInt() ?: 0} ${if (args?.get("down") == true) 1 else 0} ${px(ctx, args)}")
+                result.success(true)
             }
-            "pro.move" -> async { sendLine(ctx, "m ${px(ctx, args)}") != null }
-            "pro.button" -> async {
-                sendLine(ctx, "b ${(args?.get("button") as? Number)?.toInt() ?: 0} ${if (args?.get("down") == true) 1 else 0} ${px(ctx, args)}") != null
+            "pro.scroll" -> {
+                enqueue(ctx, "s ${px(ctx, args)} ${(args?.get("dx") as? Number)?.toFloat() ?: 0f} ${(args?.get("dy") as? Number)?.toFloat() ?: 0f}")
+                result.success(true)
             }
-            "pro.scroll" -> async {
-                sendLine(ctx, "s ${px(ctx, args)} ${(args?.get("dx") as? Number)?.toFloat() ?: 0f} ${(args?.get("dy") as? Number)?.toFloat() ?: 0f}") != null
-            }
-            "pro.key" -> async {
+            "pro.key" -> {
                 val code = keyCode((args?.get("hid") as? Number)?.toInt() ?: 0)
-                if (code == 0) false else sendLine(ctx, "k $code ${if (args?.get("down") == true) 1 else 0}") != null
+                if (code != 0) enqueue(ctx, "k $code ${if (args?.get("down") == true) 1 else 0}")
+                result.success(code != 0)
             }
             "pro.text" -> async {
                 val t = args?.get("text") as? String ?: ""
-                sendLine(ctx, "t ${Base64.encodeToString(t.toByteArray(), Base64.NO_WRAP)}", reply = true) == "ok"
+                ask(ctx, "t ${Base64.encodeToString(t.toByteArray(), Base64.NO_WRAP)}") == "ok"
             }
             else -> return false
         }

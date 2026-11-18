@@ -102,6 +102,7 @@ class _AdbDialogState extends State<_AdbDialog> {
   final _code = TextEditingController();
   String? _adb = Platform.isWindows || Platform.isLinux || Platform.isMacOS ? findAdb() : null;
   bool _installing = false;
+  bool _late = false;
 
   ClientSession get s => widget.session;
 
@@ -128,6 +129,17 @@ class _AdbDialogState extends State<_AdbDialog> {
     setState(() => _busy = true);
     _adb ??= await findAdbAnywhere();
     final info = await s.adbInfo();
+    if (info['allowed'] == null && _info != null && _info!['allowed'] == true) {
+      // A late answer: keep what we knew (ports, buttons) and just say so.
+      if (mounted) {
+        setState(() {
+          _late = true;
+          _busy = false;
+        });
+      }
+      return;
+    }
+    _late = false;
     final connect = [...(info['connect'] as List? ?? const []).cast<int>(), if (info['legacy'] != null) info['legacy'] as int];
     final pairing = (info['pairing'] as List? ?? const []).cast<int>();
     final c = connect.isEmpty ? null : await s.forwardPort(connect.first);
@@ -141,6 +153,20 @@ class _AdbDialogState extends State<_AdbDialog> {
     });
     // adb is here and the device is ready: connect right away.
     if (c != null && _adb != null && _output == null) await _run(['connect', '127.0.0.1:$c']);
+  }
+
+  /// Starts the helper, then shows its log (read through adb, so it works even while the
+  /// device answers slowly) and refreshes the status.
+  Future<void> _startPro(String command, String? log) async {
+    final dev = '127.0.0.1:$_connectLocal';
+    await _run(['-s', dev, 'shell', command]);
+    final started = _output ?? '';
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (log != null) {
+      await _run(['-s', dev, 'shell', 'cat $log; echo; ps -A 2>/dev/null | grep -c app_process']);
+      if (mounted) setState(() => _output = '$started\n\nHelper log:\n${_output ?? ''}');
+    }
+    if (mounted) await _refresh();
   }
 
   Future<void> _run(List<String> args) async {
@@ -239,6 +265,10 @@ class _AdbDialogState extends State<_AdbDialog> {
           const Divider(height: 24),
           Text('Real mouse & keyboard (Localview Pro): ${i['proRunning'] == true ? 'running' : 'not running'}',
               style: const TextStyle(fontWeight: FontWeight.w600)),
+          if (i['proError'] != null) ...[
+            const SizedBox(height: 4),
+            Text('${i['proError']}', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
           if (i['proRunning'] != true) ...[
             const SizedBox(height: 4),
             Text('Starts a small helper on $name that sends real mouse and keyboard events (hover, right-click, '
@@ -248,11 +278,7 @@ class _AdbDialogState extends State<_AdbDialog> {
               FilledButton(
                 onPressed: _busy
                     ? null
-                    : () async {
-                        await _run(['-s', '127.0.0.1:$_connectLocal', 'shell', i['proCommand'] as String]);
-                        await Future<void>.delayed(const Duration(milliseconds: 1500));
-                        if (mounted) await _refresh();
-                      },
+                    : () => _startPro(i['proCommand'] as String, i['proLog'] as String?),
                 child: const Text('Start real mouse & keyboard'),
               )
             else
@@ -279,15 +305,23 @@ class _AdbDialogState extends State<_AdbDialog> {
                 style: TextStyle(fontSize: 12)),
           ),
         ],
-        if (_output != null) ...[
-          const SizedBox(height: 12),
-          SelectableText(_output!, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
-        ],
         const SizedBox(height: 8),
         const Text('The ports stay open while this connection is open (also in the background).',
             style: TextStyle(fontSize: 12)),
       ];
     }
+    body.addAll([
+      if (_late && i != null && i['allowed'] == true)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Text('$name answered too slowly just now; this is what it said before. Press Refresh to ask again.',
+              style: const TextStyle(fontSize: 12)),
+        ),
+      if (_output != null) ...[
+        const SizedBox(height: 12),
+        SelectableText(_output!, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+      ],
+    ]);
     return AlertDialog(
       title: Text('ADB · $name'),
       content: SizedBox(
