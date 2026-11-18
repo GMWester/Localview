@@ -224,6 +224,12 @@ object ProBridge {
                 if (code != 0) enqueue(ctx, "k $code ${if (args?.get("down") == true) 1 else 0}")
                 result.success(code != 0)
             }
+            "pro.stop" -> async {
+                // The helper stops itself and every other copy (the app may not kill shell processes).
+                val r = ask(ctx, "q")
+                drop()
+                r == "bye"
+            }
             "pro.text" -> async {
                 val t = args?.get("text") as? String ?: ""
                 ask(ctx, "t ${Base64.encodeToString(t.toByteArray(), Base64.NO_WRAP)}") == "ok"

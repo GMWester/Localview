@@ -37,6 +37,7 @@ import java.lang.reflect.Method
  *   k keycode down        Android key code (modifiers are tracked for meta state)
  *   t base64              text through the virtual keyboard; replies "ok" or "no" (unmappable)
  *   p                     ping; replies "pong <injected> <refused> <base64 last error>"
+ *   q                     replies "bye", stops every other helper (old versions too), then exits
  *   audio                 (Android 12+) replies "ok", then streams the device's whole sound output as
  *                         PCM s16le stereo 48 kHz until the connection closes, or replies "no". While
  *                         this runs the sound plays only through Localview, not the device's speaker.
@@ -78,10 +79,19 @@ object ProInputServer {
         setActionButton = try {
             MotionEvent::class.java.getMethod("setActionButton", Int::class.javaPrimitiveType)
         } catch (_: Exception) { null }
-        val server = try {
-            java.net.ServerSocket(PORT, 16, java.net.InetAddress.getByName("127.0.0.1"))
-        } catch (e: Exception) {
-            System.err.println("Localview Pro input is already running")
+        // A new start replaces any helper still running (older versions included).
+        val stopped = stopOthers()
+        if (stopped > 0) println("Stopped $stopped older Localview Pro helper(s)")
+        var server: java.net.ServerSocket? = null
+        for (attempt in 0 until 20) {
+            server = try {
+                java.net.ServerSocket(PORT, 16, java.net.InetAddress.getByName("127.0.0.1"))
+            } catch (_: Exception) { null }
+            if (server != null) break
+            Thread.sleep(100) // the port is freed shortly after the old helper exits
+        }
+        if (server == null) {
+            System.err.println("Localview Pro input: port $PORT is in use by another program")
             return
         }
         println("Localview Pro input ready (Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT}, ${manager.javaClass.name})")
@@ -109,6 +119,12 @@ object ProInputServer {
                         "s" -> scroll(p[1].toFloat(), p[2].toFloat(), p[3].toFloat(), p[4].toFloat())
                         "k" -> key(p[1].toInt(), p[2] == "1")
                         "t" -> out.write((if (text(String(Base64.decode(p[1], Base64.DEFAULT)))) "ok\n" else "no\n").toByteArray())
+                        "q" -> {
+                            out.write("bye\n".toByteArray())
+                            out.flush()
+                            stopOthers()
+                            System.exit(0)
+                        }
                         "p" -> out.write("pong $injected $refused ${Base64.encodeToString(lastError.toByteArray(), Base64.NO_WRAP)}\n".toByteArray())
                     }
                 } } catch (e: java.io.IOException) {
@@ -122,6 +138,22 @@ object ProInputServer {
         } finally {
             try { s.close() } catch (_: Exception) {}
         }
+    }
+
+    /** Kills every other ProInputServer process (same shell user, so allowed). Returns how many. */
+    fun stopOthers(): Int {
+        val me = android.os.Process.myPid()
+        var n = 0
+        val dirs = java.io.File("/proc").listFiles() ?: return 0
+        for (d in dirs) {
+            val pid = d.name.toIntOrNull() ?: continue
+            if (pid == me) continue
+            val cmd = try { java.io.File(d, "cmdline").readBytes() } catch (_: Exception) { continue }
+            if (String(cmd).contains("io.localview.localview.ProInputServer")) {
+                try { android.os.Process.killProcess(pid); n++ } catch (_: Exception) {}
+            }
+        }
+        return n
     }
 
     private fun send(e: InputEvent) {
