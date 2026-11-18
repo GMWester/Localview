@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../app_controller.dart';
 import '../config.dart';
 import '../platform/android.dart';
+import '../platform/drives.dart' show webClientAllowsLargeFiles, allowLargeFilesOnDrives;
 import '../platform/macos.dart' as mac;
 import '../updater.dart';
 import 'adb_dialog.dart' show stopAdbServers;
@@ -414,6 +415,26 @@ class _ThisDevicePageState extends State<ThisDevicePage> {
                 icon: const Icon(Icons.power_settings_new),
                 label: const Text('Quit Localview'),
                 onPressed: () => _quit(context, app),
+              ),
+            ),
+          if (Platform.isWindows)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.movie_outlined),
+                label: const Text('Allow videos & large files on device drives'),
+                onPressed: () async {
+                  final m = ScaffoldMessenger.of(context);
+                  if (await webClientAllowsLargeFiles()) {
+                    m.showSnackBar(const SnackBar(content: Text('Already allowed: files up to 4 GB open from device drives.')));
+                    return;
+                  }
+                  final err = await allowLargeFilesOnDrives();
+                  m.showSnackBar(SnackBar(
+                      content: Text(err == null
+                          ? 'Files up to 4 GB now open from device drives. Reconnect if a video still fails.'
+                          : 'Could not change it: $err')));
+                },
               ),
             ),
           if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
