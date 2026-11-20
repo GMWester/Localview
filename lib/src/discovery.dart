@@ -88,10 +88,11 @@ class DiscoveryScanner extends ChangeNotifier {
     if (s == null) return;
     final q = utf8.encode(jsonEncode({'lv': 1, 'q': 1, 'mode': kModeName}));
     final targets = <InternetAddress>{
-      InternetAddress('255.255.255.255'),
-      // Devices already listed are asked directly every round: phones often drop broadcasts
-      // to save power, and one missed answer shouldn't make them vanish.
+      // Devices already listed are asked directly every round, and first: phones often drop
+      // broadcasts to save power, and the address sweep below can fill the send queue (no
+      // one answers most addresses), after which further packets are silently dropped.
       for (final d in devices.values) InternetAddress(d.address),
+      InternetAddress('255.255.255.255'),
     };
     final sweep = _round++ % 3 == 0;
     try {

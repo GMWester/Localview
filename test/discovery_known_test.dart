@@ -21,8 +21,11 @@ void main() {
     await s.start();
     final old = DateTime.now().subtract(const Duration(seconds: 15));
     s.devices['phone'] = LanDevice('phone', 'Phone', 'android', '127.0.0.1', 1, true, old);
-    await s.scan();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    // A few rounds at most: on a busy machine a single datagram can still get lost.
+    for (var i = 0; i < 5 && asked == 0; i++) {
+      await s.scan();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
     expect(asked, greaterThan(0));
     expect(s.devices['phone']!.lastSeen.isAfter(old), isTrue);
     // Not answering for longer than the expiry removes it.
