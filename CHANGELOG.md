@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.3
+
+- **Fixed: a horizontal Android screen shown tiny inside a vertical frame, with clicks in the wrong place** (regression in 1.11.2): the extra rotation check from 1.11.2 assumed the display's mode size never turns with the screen; on many devices it does, so the check forced a vertical size while the screen was horizontal. Capture and input now use the display's own current size, which follows rotation.
+
 ## 1.11.2
 
 - **Fixed (for real): the mouse acting in the wrong place on a horizontal Android device**: besides the input, the screen capture also read a screen size that could still be the vertical one after the device turned. The horizontal screen was then squeezed into a vertical picture with black bars, and every click was mapped onto the wrong spot. Capture and input now check the size against the display's actual rotation (and the panel's natural orientation, for tablets), so the picture and the clicks follow every turn.
